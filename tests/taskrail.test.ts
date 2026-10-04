@@ -212,9 +212,10 @@ test('the band draws the board on the terminal and the desktop, and nothing when
   await hidden.unmount()
 })
 
-test('/clear reloads the mode and the plan from the store, which session.start cannot do in the kit', async ($, on) => {
+test('/clear reloads the mode and drops the plan, even one stored under the same session id', async ($, on) => {
   mock.clock(on, { now: NOON })
-  // A plan a previous version wrote: same shape, so it loads unchanged.
+  // The engine gives /clear a new session id; the same id is kept here to
+  // prove the plan is dropped by the mod and not by a key that moved.
   mock.store(on, { mode: 'off', 'plan:test-session': EXAMPLE })
   on('session.id', () => ({ value: 'test-session' }))
   // No settings hook is configured beneath, so the bottom answers nothing.
@@ -224,6 +225,19 @@ test('/clear reloads the mode and the plan from the store, which session.start c
   expect((await $.command.run({ command: 'taskrail', args: '', ...TYPED })).text).toContain('mode full')
 
   await $.classic.SessionStart({ source: 'clear' })
+  expect((await $.command.run({ command: 'taskrail', args: '', ...TYPED })).text).toBe(
+    'board: mode off (no plan in this session)',
+  )
+})
+
+test('/resume reloads the mode and the plan from the store', async ($, on) => {
+  mock.clock(on, { now: NOON })
+  // A plan a previous version wrote: same shape, so it loads unchanged.
+  mock.store(on, { mode: 'off', 'plan:test-session': EXAMPLE })
+  on('session.id', () => ({ value: 'test-session' }))
+  on('classic.SessionStart', () => ({}))
+
+  await $.classic.SessionStart({ source: 'resume' })
   // No "(no plan in this session)" suffix: the stored plan loaded too.
   expect((await $.command.run({ command: 'taskrail', args: '', ...TYPED })).text).toBe('board: mode off')
 })

@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The README says what the header counts, how the tiles are coloured, that `note` exists, and that a plan belongs to its session (a restart needs `--resume`).
 
 ### Fixed
+- A user skill or command named `taskrail` no longer takes the whole mod down: Claude Code refuses the mod's `/taskrail`, and the tools, the mode and the plan now load anyway.
+- `/clear` drops the plan by design, and the README and `ARCHITECTURE.md` say so instead of promising that it survives.
 
 ## [v0.1.1] - 2026-10-04
 

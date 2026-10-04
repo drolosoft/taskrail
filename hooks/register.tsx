@@ -1,7 +1,8 @@
 // The wave board as a mod: the plan of this session lives in `$.state`
 // (reactive, survives a hot reload) with a copy in `$.store` per session id
-// (survives /clear, /resume and a restart). The band above the prompt draws
-// it; `/taskrail` picks the mode; the model updates it through three tools.
+// (survives /resume and a restart; /clear drops it). The band above the
+// prompt draws it; `/taskrail` picks the mode; the model updates it through
+// three tools.
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
@@ -35,7 +36,7 @@ async function planKey($: EngineInterface): Promise<string> {
 
 /**
  * Writes the plan to the state (redraws the band) and to the store (so it
- * outlives /clear and a restart).
+ * outlives /resume and a restart).
  */
 async function savePlan($: EngineInterface, next: WaveBoardPlan): Promise<void> {
   await update($, plan, () => next)
@@ -101,14 +102,31 @@ const SET_SCHEMA = {
   },
 }
 
-export const register: Register = on => {
-  on('session.start', async ($, e, next) => {
+/**
+ * Registers `/taskrail`. The engine refuses the name when the user already
+ * has a skill or a command called `taskrail`, and the refusal throws; the
+ * mod then runs without its command and the mode stays as it was.
+ */
+async function registerCommand($: EngineInterface): Promise<void> {
+  try {
     await $.command.register({
       name: 'taskrail',
       description: 'Wave board above the prompt: off, bar, full or both',
       argumentHint: '[off|bar|full|both]',
       immediate: true,
     })
+  } catch {
+    // The user's own /taskrail stays; the tools still carry the board.
+  }
+}
+
+export const register: Register = on => {
+  on('session.start', async ($, e, next) => {
+    // A refused command must not take the rest of the hook down with it:
+    // without the tools, the mode and the plan there is no board at all,
+    // while without the command the board only keeps the mode it had.
+    await registerCommand($)
+
     await $.tool.register({
       name: 'plan',
       description:
@@ -135,9 +153,17 @@ export const register: Register = on => {
 
   // /clear, /resume and /branch reset every `$.state` value and fire no
   // `session.start`; the classic event does, with the source that says so.
-  on('classic.SessionStart', { source: ['clear', 'resume', 'fork'] }, async ($, e, next) => {
+  on('classic.SessionStart', { source: ['resume', 'fork'] }, async ($, e, next) => {
     await loadMode($)
     await loadPlan($)
+
+    return next(e)
+  })
+
+  // /clear starts over, and the plan goes with the conversation it belonged
+  // to; only the mode comes back, because it is a preference of the machine.
+  on('classic.SessionStart', { source: 'clear' }, async ($, e, next) => {
+    await loadMode($)
 
     return next(e)
   })

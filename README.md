@@ -38,6 +38,8 @@ For one session with a local copy: `claude --plugin-dir ./taskrail`.
 
 `/taskrail` alone answers the current mode. The choice is kept across sessions.
 
+If you already have a skill or a command named `taskrail`, Claude Code keeps yours and refuses the mod's. The board and the three tools still work, in the mode last chosen; rename yours to get `/taskrail` back.
+
 ### How Claude uses it
 
 The mod registers three tools. Claude calls them on its own when it runs a plan with several tasks; you can also ask for them by name.
@@ -50,7 +52,7 @@ The mod registers three tools. Claude calls them on its own when it runs a plan 
 
 Icons: 🥚 pending · 🔧 working · 👀 in review · 🩹 fixing · 🧪 testing · 🟩 merged · 🚀 shipped · 🔑 needs you · 👻 missing · 🧟 stale · 💥 broken · 🥱 idle · 🛑 stopped. The header counts each of these icons in use. A wave's station is 🟩 when every task is merged; otherwise it shows the most pressing state among its tasks, in this order: 🛑 🔑 💥 🧟 👻 🩹 👀 🧪 🔧 🚀, else 🥚. The "N of M" counts 🟩 only; the tiles are green for 🟩, yellow for the running states (🔧 👀 🩹 🧪, at least one tile while anything runs) and red for the rest. `plan` and `set` also take a `note`, the key line under the rail.
 
-The plan lives in the session's plugin state and in the plugin store under the session id, so it survives `/clear` and `/resume`, including a restart of Claude Code followed by `--resume`. A new session starts with no plan.
+The plan lives in the session's plugin state and in the plugin store under the session id, so it survives `/resume`, including a restart of Claude Code followed by `--resume`. `/clear` drops the plan along with the conversation, and a new session starts with no plan.
 
 ### What it reads and writes
 

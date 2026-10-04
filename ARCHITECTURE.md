@@ -27,13 +27,20 @@ state for the engine's type layer.
 
 | What | Where | Why |
 |---|---|---|
-| The plan | session state (`$.state`, reactive) and the plugin store under `plan:<session id>` | the state redraws the band on every change; the store survives `/clear`, `/resume` and a restart followed by `--resume` |
+| The plan | session state (`$.state`, reactive) and the plugin store under `plan:<session id>` | the state redraws the band on every change; the store survives `/resume` and a restart followed by `--resume` |
 | The mode | the plugin store under `mode`, one value per machine | the choice is a preference, not part of a plan |
 
 `/clear`, `/resume` and a fork reset the session state and do not fire
 `session.start`; the mod listens to `classic.SessionStart` with those
-sources and loads both values from the store again. A brand-new session has
-no plan until Claude calls `plan`: one board per session, by design.
+sources. After `/resume` and a fork it loads both values from the store
+again; after `/clear` it loads the mode only, because the plan goes with the
+conversation it belonged to. A brand-new session has no plan until Claude
+calls `plan`: one board per session, by design.
+
+At `session.start` the command is registered inside a `try`: the engine
+refuses `/taskrail` when the user already has a skill or a command with that
+name, and the refusal must not stop the tools, the mode and the plan from
+loading.
 
 ## Flows
 
