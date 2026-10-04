@@ -13,9 +13,9 @@ const TYPED = { origin: { kind: 'composer' }, presentation: { isFullscreen: true
 const EXAMPLE = newPlan(
   {
     project: 'hopto',
-    title: 'plan 7 · limpieza',
+    title: 'plan 7 · cleanup',
     goal: 'cleanup → main',
-    description: 'Pasada de limpieza sin cambiar comportamiento.',
+    description: 'A cleanup pass that changes no behaviour.',
     waves: [
       { name: 'A', tasks: ['T1', 'T2', 'T3'] },
       { name: 'B', tasks: ['T4', 'T5'] },
@@ -27,12 +27,11 @@ const EXAMPLE = newPlan(
 
 /**
  * The world beneath the mod: a clock stopped at noon, an empty store and
- * no HOME, so the mod never looks for the old scripts' files.
+ * a fixed session id.
  */
 function mockWorld(on: On): void {
   mock.clock(on, { now: NOON })
   mock.store(on)
-  mock.env(on, {})
   // The store key of the plan carries the session id; the kit has none.
   on('session.id', () => ({ value: 'test-session' }))
 }
@@ -47,7 +46,7 @@ test('a new plan starts every task pending and renders the rail', async () => {
   const lines = renderText(EXAMPLE, 40).split('\n')
 
   expect(lines[0]).toBe('╭' + '─'.repeat(40))
-  expect(lines[1]).toBe('│ plan 7 · limpieza · 0 de 6 · 12:30 · 🥚 6')
+  expect(lines[1]).toBe('│ plan 7 · cleanup · 0 of 6 · 12:30 · 🥚 6')
   expect(lines).toContain('│ main 🥚 A 0/3 ┄🥚 B 0/2 ┄🥚 C 0/1 ┄▶ 🚀 cleanup → main')
   expect(lines).toContain('│      ├🥚 T1    ├🥚 T4    ╰🥚 T6')
   expect(lines).toContain('│      ╰🥚 T3')
@@ -57,17 +56,17 @@ test('a new plan starts every task pending and renders the rail', async () => {
 test('set changes icons, keeps the layout and bolds the task in flight', async () => {
   const { plan, unknown } = applyUpdates(
     EXAMPLE,
-    { tasks: { T1: '🟩', T2: '🟩', T3: '🟩', T4: '👀', T9: '🟩' }, note: '👀 T4 en revisión' },
+    { tasks: { T1: '🟩', T2: '🟩', T3: '🟩', T4: '👀', T9: '🟩' }, note: '👀 T4 in review' },
     NOON,
   )
 
   expect(unknown).toEqual(['T9'])
 
   const text = renderText(plan, 40)
-  expect(text).toContain('│ plan 7 · limpieza · 3 de 6 · 12:30 · 🟩 3 · 👀 1 · 🥚 2')
+  expect(text).toContain('│ plan 7 · cleanup · 3 of 6 · 12:30 · 🟩 3 · 👀 1 · 🥚 2')
   expect(text).toContain('│ main 🟩 A 3/3 ━👀 B 0/2 ┄🥚 C 0/1 ┄▶ 🚀 cleanup → main')
   expect(text).toContain('│      ├🟩 T1    ├👀 T4    ╰🥚 T6')
-  expect(text).toContain('│ 👀 T4 en revisión')
+  expect(text).toContain('│ 👀 T4 in review')
   expect(text).toContain('🟩'.repeat(15) + '🟨'.repeat(5) + '🟥'.repeat(10) + ' 3/6')
 
   const rows = renderFull(plan, 40)
@@ -81,8 +80,18 @@ test('the bar is one line with a station per wave and ten tiles', async () => {
   const { plan } = applyUpdates(EXAMPLE, { tasks: { T1: '🟩', T2: '🟩', T3: '🟩' } }, NOON)
 
   expect(renderBar(plan)).toBe(
-    ' hopto · plan 7 · limpieza · 12:30 · A 🟩 3/3 ┄ B 🥚 0/2 ┄ C 🥚 0/1 ▶ 🚀 cleanup → main · 🟩🟩🟩🟩🟩🟥🟥🟥🟥🟥 3/6',
+    ' hopto · plan 7 · cleanup · 12:30 · A 🟩 3/3 ┄ B 🥚 0/2 ┄ C 🥚 0/1 ▶ 🚀 cleanup → main · 🟩🟩🟩🟩🟩🟥🟥🟥🟥🟥 3/6',
   )
+})
+
+test('the rules of a narrow board are exactly its width plus the border', async () => {
+  const rules = renderText(EXAMPLE, 40).split('\n').filter(line => /^[╭├╰]/.test(line))
+
+  // Title, description, rail and note rules, then the bottom.
+  expect(rules.length).toBe(5)
+  for (const line of rules) {
+    expect(cells(line)).toBe(41)
+  }
 })
 
 test('set refuses to run before a plan exists', async ($, on) => {
@@ -103,28 +112,32 @@ test('the plan and set tools keep the board and answer the mode hint', async ($,
     waves: [{ name: 'A', tasks: ['T1', 'T2'] }],
   })
   expect(planned.deny).toBeUndefined()
-  expect(String(planned.result)).toContain('plan 8 · 0 de 2 · 12:30')
+  expect(String(planned.result)).toContain('plan 8 · 0 of 2 · 12:30')
 
-  const changed = await $.tool.call({ tool: 'mcp__taskrail__set', tasks: { T1: '🟩' }, note: 'T2 pendiente' })
-  expect(String(changed.result)).toContain('plan 8 · 1 de 2')
-  expect(String(changed.result)).toContain('modo')
+  const changed = await $.tool.call({ tool: 'mcp__taskrail__set', tasks: { T1: '🟩' }, note: 'T2 pending' })
+  expect(String(changed.result)).toContain('plan 8 · 1 of 2')
+  expect(String(changed.result)).toContain('mode')
 
   const shown = await $.tool.call({ tool: 'mcp__taskrail__show' })
   expect(String(shown.result)).toContain('│      ├🟩 T1')
-  expect(String(shown.result)).toContain('│ T2 pendiente')
+  expect(String(shown.result)).toContain('│ T2 pending')
 })
 
 test('/taskrail switches the mode, keeps it in the store and refuses what is not one', async ($, on) => {
   mockWorld(on)
 
   const bad = await $.command.run({ command: 'taskrail', args: 'loud', ...TYPED })
-  expect(bad.text).toBe('uso: /taskrail [off|bar|full|both]')
+  expect(bad.text).toBe('usage: /taskrail [off|bar|full|both]')
+
+  // Modes are lower case and documented so; spaces are forgiven, case is not.
+  const shouted = await $.command.run({ command: 'taskrail', args: '  BAR  ', ...TYPED })
+  expect(shouted.text).toBe('usage: /taskrail [off|bar|full|both]')
 
   const bar = await $.command.run({ command: 'taskrail', args: 'bar', ...TYPED })
-  expect(bar.text).toBe('tablero: modo bar')
+  expect(bar.text).toBe('board: mode bar')
 
   const asked = await $.command.run({ command: 'taskrail', args: '', ...TYPED })
-  expect(asked.text).toBe('tablero: modo bar (sin plan en esta sesión)')
+  expect(asked.text).toBe('board: mode bar (no plan in this session)')
 })
 
 test('the band draws the board on the terminal and the desktop, and nothing when off', async ($, on) => {
@@ -177,17 +190,18 @@ test('the band draws the board on the terminal and the desktop, and nothing when
   await hidden.unmount()
 })
 
-test('/clear reloads the mode from the store, which session.start cannot do in the kit', async ($, on) => {
+test('/clear reloads the mode and the plan from the store, which session.start cannot do in the kit', async ($, on) => {
   mock.clock(on, { now: NOON })
-  mock.store(on, { mode: 'off' })
-  mock.env(on, {})
+  // A plan a previous version wrote: same shape, so it loads unchanged.
+  mock.store(on, { mode: 'off', 'plan:test-session': EXAMPLE })
   on('session.id', () => ({ value: 'test-session' }))
   // No settings hook is configured beneath, so the bottom answers nothing.
   on('classic.SessionStart', () => ({}))
 
   // The atom's default shows: session.start's own load did not reach the test.
-  expect((await $.command.run({ command: 'taskrail', args: '', ...TYPED })).text).toContain('modo full')
+  expect((await $.command.run({ command: 'taskrail', args: '', ...TYPED })).text).toContain('mode full')
 
   await $.classic.SessionStart({ source: 'clear' })
-  expect((await $.command.run({ command: 'taskrail', args: '', ...TYPED })).text).toContain('modo off')
+  // No "(no plan in this session)" suffix: the stored plan loaded too.
+  expect((await $.command.run({ command: 'taskrail', args: '', ...TYPED })).text).toBe('board: mode off')
 })

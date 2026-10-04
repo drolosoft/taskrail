@@ -1,6 +1,6 @@
-// The board itself: pure functions from a plan to the lines the band draws.
-// A port of ~/.claude/wave-board/render.py, kept free of `$` so the hooks
-// module can import it and `claude plugin validate` still sees every call.
+// The board itself: pure functions from a plan to the lines the band draws,
+// kept free of `$` so the hooks module can import it and `claude plugin
+// validate` still sees every call.
 import type { WaveBoardMode, WaveBoardPlan, WaveBoardTask, WaveBoardWave } from '../types'
 
 /** A run of text in a row, bold when the task is in flight. */
@@ -121,12 +121,12 @@ export function progress(plan: WaveBoardPlan): { done: number; running: number; 
 
 /**
  * The one-line summary a tool result prints and the header carries:
- * ` title · done de total · HH:MM · counts`.
+ * ` title · done of total · HH:MM · counts`.
  */
 export function headerLine(plan: WaveBoardPlan): string {
   const { done, total } = progress(plan)
 
-  return ` ${plan.title} · ${done} de ${total} · ${clock(plan.updatedAt)} · ${counts(plan)}`
+  return ` ${plan.title} · ${done} of ${total} · ${clock(plan.updatedAt)} · ${counts(plan)}`
 }
 
 /**
@@ -153,8 +153,8 @@ export function rail(plan: WaveBoardPlan): string {
 /**
  * The task rows under the rail: each wave hangs its tasks under its
  * station, `├` on every row but the last, `╰` on the last, ten cells per
- * column. Empty slots stay blank: Juan would rather have a little drift
- * than filler squares (2026-09-27). Ids of tasks in flight go bold.
+ * column. Empty slots stay blank: a little drift reads better than filler
+ * squares. Ids of tasks in flight go bold.
  */
 export function taskRows(plan: WaveBoardPlan): Segment[][] {
   const depth = Math.max(0, ...plan.waves.map(wave => wave.tasks.length))
@@ -243,7 +243,7 @@ export function wrapText(text: string, width: number): string[] {
 /**
  * The boxed board: header, description, rail and rows, note and a
  * thirty-tile bar. No right border, because rows carry different emoji
- * counts and a right edge would zigzag (Juan, 2026-09-27).
+ * counts and a right edge would zigzag.
  * @param width cells of the rules; the band's `bodyColumns` less two
  */
 export function renderFull(plan: WaveBoardPlan, width = DEFAULT_WIDTH): Segment[][] {
@@ -255,11 +255,11 @@ export function renderFull(plan: WaveBoardPlan, width = DEFAULT_WIDTH): Segment[
   lines.push([
     { text: '│ ' },
     { text: plan.title, bold: true },
-    { text: ` · ${done} de ${total} · ${clock(plan.updatedAt)} · ${counts(plan)}` },
+    { text: ` · ${done} of ${total} · ${clock(plan.updatedAt)} · ${counts(plan)}` },
   ])
 
   // The plan's description, written once and shown under the title on at
-  // most two lines, behind a rule of its own (Juan, 2026-09-27).
+  // most two lines, behind a rule of its own.
   const description = wrapText(plan.description, width - 4).slice(0, 2)
 
   if (description.length > 0) {
@@ -379,68 +379,19 @@ export function applyUpdates(plan: WaveBoardPlan, input: SetInput, now: number):
 }
 
 /**
- * Reads a plan out of the state.json the old scripts wrote, so a session
- * that started on them keeps its board when the mod loads.
- * @returns the plan, or null when the text is not one
- */
-export function planFromLegacy(text: string, now: number): WaveBoardPlan | null {
-  let parsed: unknown
-
-  try {
-    parsed = JSON.parse(text)
-  } catch {
-    return null
-  }
-
-  if (typeof parsed !== 'object' || parsed === null || !Array.isArray((parsed as { waves?: unknown }).waves)) {
-    return null
-  }
-
-  const legacy = parsed as Partial<WaveBoardPlan> & { waves: unknown[] }
-  const waves = legacy.waves.flatMap((wave): WaveBoardWave[] => {
-    if (typeof wave !== 'object' || wave === null) {
-      return []
-    }
-
-    const { name, tasks } = wave as { name?: unknown; tasks?: unknown }
-
-    if (typeof name !== 'string' || !Array.isArray(tasks)) {
-      return []
-    }
-
-    return [{
-      name,
-      tasks: tasks.flatMap((task): WaveBoardTask[] =>
-        Array.isArray(task) && typeof task[0] === 'string' && typeof task[1] === 'string' ? [[task[0], task[1]]] : []),
-    }]
-  })
-
-  return {
-    project: typeof legacy.project === 'string' ? legacy.project : '',
-    title: typeof legacy.title === 'string' ? legacy.title : '',
-    goal: typeof legacy.goal === 'string' ? legacy.goal : '',
-    description: typeof legacy.description === 'string' ? legacy.description : '',
-    note: typeof legacy.note === 'string' ? legacy.note : '',
-    waves,
-    updatedAt: now,
-  }
-}
-
-/**
- * The line the tools append for the model: what the mode means for the
- * chat, in Juan's own rules (2026-09-27), so the model never reads the
- * mode file.
+ * The line the tools append for the model: what the current mode asks of
+ * the chat, so the model never has to read a settings file.
  */
 export function modeHint(mode: WaveBoardMode): string {
   switch (mode) {
     case 'off':
-      return 'modo off: el tablero no se dibuja bajo el prompt; en el chat solo cuando Juan lo pida (mcp__taskrail__show).'
+      return 'mode off: the board is not drawn under the prompt; show it in the chat only when the user asks (mcp__taskrail__show).'
     case 'bar':
-      return 'modo bar: la barra ya está bajo el prompt; no dibujes el tablero en el chat.'
+      return 'mode bar: the one-line rail is already under the prompt; do not draw the board in the chat.'
     case 'full':
-      return 'modo full: el tablero ya está bajo el prompt; no lo dibujes en el chat.'
+      return 'mode full: the board is already under the prompt; do not draw it in the chat.'
     case 'both':
-      return 'modo both: el tablero está bajo el prompt Y se dibuja en el chat en cada cierre e hito (mcp__taskrail__show).'
+      return 'mode both: the board is under the prompt AND is drawn in the chat at every milestone and close (mcp__taskrail__show).'
   }
 }
 

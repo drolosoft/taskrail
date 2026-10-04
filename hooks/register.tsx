@@ -13,7 +13,6 @@ import {
   MODES,
   modeHint,
   newPlan,
-  planFromLegacy,
   renderBar,
   renderFull,
   renderText,
@@ -23,14 +22,11 @@ import type { PlanInput, SetInput } from './board'
 // The plan of the session, null until the model creates one.
 const plan = atom({ plugin: 'taskrail', key: 'plan' } as const, null)
 
-// What the band shows. `full` is what Juan runs by default (2026-10-03).
+// What the band shows; the whole board by default.
 const mode = atom({ plugin: 'taskrail', key: 'mode' } as const, 'full')
 
 // The store key of the mode, shared by every session on this machine.
 const MODE_KEY = 'mode'
-
-// The folder the old scripts keep their state in, under $HOME.
-const LEGACY_DIR = '.claude/wave-board'
 
 /** The store key of this session's plan. */
 async function planKey($: EngineInterface): Promise<string> {
@@ -46,57 +42,21 @@ async function savePlan($: EngineInterface, next: WaveBoardPlan): Promise<void> 
   await $.store.set(await planKey($), next)
 }
 
-/**
- * Loads the session's plan: the store first, then the state.json the old
- * scripts wrote for this session id, else nothing.
- */
+/** Loads the session's plan from the store, if any. */
 async function loadPlan($: EngineInterface): Promise<void> {
   const stored = await $.store.get(await planKey($))
 
   if (stored !== undefined) {
     await update($, plan, () => stored as WaveBoardPlan)
-    return
-  }
-
-  const home = await $.env.get('HOME')
-  const id = await $.session.id()
-  const legacyPath = `${home}/${LEGACY_DIR}/sessions/${id}/state.json`
-
-  if (home === undefined || !(await $.fs.exists(legacyPath))) {
-    return
-  }
-
-  const legacy = planFromLegacy(await $.fs.read(legacyPath), await $.clock.now())
-
-  if (legacy !== null) {
-    await savePlan($, legacy)
   }
 }
 
-/**
- * Loads the mode: the store, else the mode file of the old scripts, so the
- * first run of the mod shows what Juan last chose with the old `wb` script.
- */
+/** Loads the mode the user last chose, kept in the store across sessions. */
 async function loadMode($: EngineInterface): Promise<void> {
   const stored = await $.store.get(MODE_KEY)
 
   if (isMode(stored)) {
     await update($, mode, () => stored)
-    return
-  }
-
-  const home = await $.env.get('HOME')
-  const legacyPath = `${home}/${LEGACY_DIR}/mode`
-
-  if (home === undefined || !(await $.fs.exists(legacyPath))) {
-    return
-  }
-
-  const legacy = (await $.fs.read(legacyPath)).trim()
-
-  if (isMode(legacy)) {
-    await update($, mode, () => legacy)
-    await $.store.set(MODE_KEY, legacy)
   }
 }
 
@@ -105,7 +65,7 @@ const PLAN_SCHEMA = {
   type: 'object',
   properties: {
     project: { type: 'string', description: 'Short project name, shown first in the bar (hopto, laporra-go).' },
-    title: { type: 'string', description: 'The plan as the header names it: "plan 7 · limpieza".' },
+    title: { type: 'string', description: 'The plan as the header names it: "plan 7 · cleanup".' },
     goal: { type: 'string', description: 'What the rail ends in, after 🚀: "v0.1.0", "cleanup → main".' },
     description: { type: 'string', description: 'What the whole plan does, two lines at most; written once.' },
     note: { type: 'string', description: 'The key line: what is not 🟩 and what is being waited on.' },
@@ -164,7 +124,7 @@ export const register: Register = on => {
     await $.tool.register({
       name: 'show',
       description:
-        'Returns the whole board as text, to paste in the chat inside a fenced code block when Juan asks for it (mode off) or at every milestone (mode both). Never in modes bar or full.',
+        'Returns the whole board as text, to paste in the chat inside a fenced code block when the user asks for it (mode off) or at every milestone (mode both). Never in modes bar or full.',
     })
 
     await loadMode($)
@@ -188,17 +148,17 @@ export const register: Register = on => {
 
     if (wanted === '') {
       const hasPlan = (await read($, plan)) !== null
-      return { text: `tablero: modo ${current}${hasPlan ? '' : ' (sin plan en esta sesión)'}` }
+      return { text: `board: mode ${current}${hasPlan ? '' : ' (no plan in this session)'}` }
     }
 
     if (!isMode(wanted)) {
-      return { text: `uso: /taskrail [${MODES.join('|')}]` }
+      return { text: `usage: /taskrail [${MODES.join('|')}]` }
     }
 
     await update($, mode, () => wanted)
     await $.store.set(MODE_KEY, wanted)
 
-    return { text: `tablero: modo ${wanted}` }
+    return { text: `board: mode ${wanted}` }
   })
 
   on('tool.call', { tool: 'mcp__taskrail__plan' }, async ($, e) => {

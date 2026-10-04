@@ -7,14 +7,14 @@ export type WaveBoardMode = 'off' | 'bar' | 'full' | 'both'
 
 /**
  * One task of the plan: its id as it appears in the map and its state icon.
- * A tuple, so the shape matches the state.json the old scripts wrote.
+ * A tuple: compact in the store and cheap to compare.
  */
 export type WaveBoardTask = [id: string, icon: string]
 
 /** One wave: the tasks that run in parallel under one station of the rail. */
 export type WaveBoardWave = { name: string; tasks: WaveBoardTask[] }
 
-/** The plan of one session, the same fields the old state.json carried. */
+/** The plan of one session. */
 export type WaveBoardPlan = {
   project: string
   title: string
