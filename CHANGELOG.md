@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - A user skill or command named `taskrail` no longer takes the whole mod down: Claude Code refuses the mod's `/taskrail`, and the tools, the mode and the plan now load anyway.
 - `/clear` drops the plan by design, and the README and `ARCHITECTURE.md` say so instead of promising that it survives.
+- `tsc --noEmit` is clean: `types/index.d.ts` declares the inputs of `plan`, `set` and `show`, which the type layer Claude Code lays does not know.
 
 ## [v0.1.1] - 2026-10-04
 

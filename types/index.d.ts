@@ -26,7 +26,35 @@ export type WaveBoardPlan = {
   updatedAt: number
 }
 
+/** What the `plan` tool receives: the plan's words and its waves with task ids. */
+export type PlanInput = {
+  project: string
+  title: string
+  goal: string
+  description?: string
+  note?: string
+  waves: { name: string; tasks: string[] }[]
+}
+
+/** What the `set` tool receives: icons per task id and the optional text fields. */
+export type SetInput = {
+  tasks?: Record<string, string>
+  note?: string
+  goal?: string
+  title?: string
+  description?: string
+}
+
 declare module 'claude-code' {
+  // The mod's own tools, by the name the engine gives them. The type layer
+  // the engine lays only knows the MCP servers a session had connected, so
+  // without these entries `tool.call` and the tests reject the three names.
+  interface McpToolInputs {
+    'mcp__taskrail__plan': PlanInput
+    'mcp__taskrail__set': SetInput
+    'mcp__taskrail__show': {}
+  }
+
   interface PluginState {
     'taskrail': {
       plan: WaveBoardPlan | null

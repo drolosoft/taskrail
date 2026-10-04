@@ -20,8 +20,10 @@ Two source files with one rule between them:
   tools at `session.start`, keeps the plan and the mode, and draws the
   band in `ui.render` for the `AbovePrompt` component.
 
-`types/index.d.ts` declares the plan types and the shape of the mod's
-state for the engine's type layer.
+`types/index.d.ts` declares the plan types, the shape of the mod's state
+and the inputs of the three tools for the engine's type layer. The tools
+are declared by hand (`McpToolInputs`) because the types the engine lays
+only list the MCP servers a session had connected, never a mod's own tools.
 
 ## Where the state lives
 

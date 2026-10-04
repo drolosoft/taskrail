@@ -39,6 +39,10 @@ The band is mounted on both the terminal and the desktop surfaces. CI runs
 the same `claude plugin test .`, plus `scripts/changelog-section_test.sh`,
 which guards the script that turns a CHANGELOG section into release notes.
 
+The type check is not part of CI and has to stay clean:
+`npx -p typescript tsc --noEmit -p tsconfig.json` prints nothing. A new
+tool, or a new field of an existing one, goes in `types/index.d.ts` first.
+
 ## Releasing
 
 1. Move the `[Unreleased]` lines of `CHANGELOG.md` under

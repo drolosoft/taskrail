@@ -1,7 +1,7 @@
 // The board itself: pure functions from a plan to the lines the band draws,
 // kept free of `$` so the hooks module can import it and `claude plugin
 // validate` still sees every call.
-import type { WaveBoardMode, WaveBoardPlan, WaveBoardTask, WaveBoardWave } from '../types'
+import type { PlanInput, SetInput, WaveBoardMode, WaveBoardPlan, WaveBoardTask, WaveBoardWave } from '../types'
 
 /** A run of text in a row, bold when the task is in flight. */
 export type Segment = { text: string; bold?: boolean }
@@ -303,16 +303,6 @@ export function renderText(plan: WaveBoardPlan, width = DEFAULT_WIDTH): string {
     .join('\n')
 }
 
-/** What the `plan` tool receives: the plan's words and its waves with task ids. */
-export type PlanInput = {
-  project: string
-  title: string
-  goal: string
-  description?: string
-  note?: string
-  waves: { name: string; tasks: string[] }[]
-}
-
 /**
  * A fresh plan from the tool's input: every task starts pending.
  * @param now epoch milliseconds of the write
@@ -332,15 +322,6 @@ export function newPlan(input: PlanInput, now: number): WaveBoardPlan {
     waves,
     updatedAt: now,
   }
-}
-
-/** What the `set` tool receives: icons per task id and the optional text fields. */
-export type SetInput = {
-  tasks?: Record<string, string>
-  note?: string
-  goal?: string
-  title?: string
-  description?: string
 }
 
 /**

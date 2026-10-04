@@ -18,7 +18,6 @@ import {
   renderFull,
   renderText,
 } from './board'
-import type { PlanInput, SetInput } from './board'
 
 // The plan of the session, null until the model creates one.
 const plan = atom({ plugin: 'taskrail', key: 'plan' } as const, null)
@@ -188,13 +187,11 @@ export const register: Register = on => {
   })
 
   on('tool.call', { tool: 'mcp__taskrail__plan' }, async ($, e) => {
-    const input = e as unknown as PlanInput
-
-    if (!Array.isArray(input.waves) || input.waves.length === 0) {
+    if (!Array.isArray(e.waves) || e.waves.length === 0) {
       return { deny: 'taskrail: a plan needs at least one wave with its task ids.' }
     }
 
-    const created = newPlan(input, await $.clock.now())
+    const created = newPlan(e, await $.clock.now())
     await savePlan($, created)
 
     return { result: `${headerLine(created)}\n${modeHint(await read($, mode))}` }
@@ -207,7 +204,7 @@ export const register: Register = on => {
       return { deny: 'taskrail: no plan in this session yet; create one with mcp__taskrail__plan.' }
     }
 
-    const { plan: changed, unknown } = applyUpdates(current, e as unknown as SetInput, await $.clock.now())
+    const { plan: changed, unknown } = applyUpdates(current, e, await $.clock.now())
     await savePlan($, changed)
 
     const warning = unknown.length > 0 ? `\nunknown task ids, ignored: ${unknown.join(', ')}` : ''
