@@ -1,0 +1,8 @@
+# Keeps the pinned GitHub Actions current: each bump arrives as a pull
+# request with the new commit SHA, so the workflows stay pinned and fresh.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
