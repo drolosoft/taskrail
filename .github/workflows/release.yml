@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+# Publishing the release writes to the repository's releases; reading
+# check-runs needs its own scope, since declaring any permissions here
+# sets every other one to none.
+permissions:
+  contents: write
+  checks: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # The tag and the manifest must agree: the directory and the
+      # marketplace both read `version` from plugin.json.
+      - name: Tag matches plugin.json
+        run: |
+          want="v$(jq -r .version .claude-plugin/plugin.json)"
+          if [ "$GITHUB_REF_NAME" != "$want" ]; then
+            echo "tag $GITHUB_REF_NAME, but plugin.json says $want" >&2
+            exit 1
+          fi
+
+      # Fails early when the notes are missing.
+      - name: Release notes
+        run: bash scripts/changelog-section.sh "$GITHUB_REF_NAME" > release-notes.md
+
+      # A tag must sit on a commit CI passed, or this would publish a
+      # version CI would have refused.
+      - name: Require CI green on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs" \
+              --jq '[.check_runs[] | select(.name=="test") | .conclusion] | first')"
+          if [ "$conclusion" != "success" ]; then
+            echo "CI's test job on $GITHUB_SHA is not green (got: ${conclusion:-none})" >&2
+            exit 1
+          fi
+
+      # Nothing to attach: the plugin installs from the repository itself.
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "taskrail $GITHUB_REF_NAME" \
+            --notes-file release-notes.md \
+            --verify-tag

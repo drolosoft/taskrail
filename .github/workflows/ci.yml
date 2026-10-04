@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Least privilege: this workflow only reads the repository.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # Pinned: a floating "latest" would change what the tests run on out
+      # of step with any commit of ours. Bump it by hand.
+      - name: Claude Code
+        run: npm install -g @anthropic-ai/claude-code@2.1.289
+
+      - name: Validate the manifest
+        run: claude plugin validate --strict .
+
+      - name: Mod tests
+        run: claude plugin test .
+
+      # The release notes come out of CHANGELOG.md through this script; a
+      # change that broke it would otherwise show only on the next tag.
+      - name: Release notes self-test
+        run: bash scripts/changelog-section_test.sh
