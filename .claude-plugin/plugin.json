@@ -1,7 +1,7 @@
 {
   "name": "taskrail",
   "displayName": "Taskrail",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A live wave board of your session's plan above the prompt: waves, tasks and their state, kept current by Claude through three tools and switched with /taskrail.",
   "author": { "name": "Drolosoft", "email": "forge@drolosoft.com", "url": "https://drolosoft.com" },
   "license": "MIT",
