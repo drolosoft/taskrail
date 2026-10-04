@@ -1,0 +1,15 @@
+# Laid by the Claude Code engine at every load; never source
+.claude-plugin/types/
+tsconfig.json
+
+# OS and editors
+.DS_Store
+.idea/
+.vscode/
+
+# Internal working files never ship from a public repository
+.claude/
+.superpowers/
+CLAUDE.md
+CONTINUE.md
+docs/superpowers/

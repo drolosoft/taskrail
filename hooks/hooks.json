@@ -1,0 +1,4 @@
+{
+  "description": "The taskrail hooks module",
+  "modules": ["./register.tsx"]
+}

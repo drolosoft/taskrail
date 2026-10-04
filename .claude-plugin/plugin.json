@@ -1,0 +1,7 @@
+{
+  "name": "taskrail",
+  "version": "0.1.0",
+  "description": "Draws the wave board of the session's plan above the prompt, with /taskrail to pick off, bar, full or both, and tools the model updates it with",
+  "author": { "name": "Juan Moreno (txeo)" },
+  "types": "./types/index.d.ts"
+}
