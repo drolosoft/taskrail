@@ -9,7 +9,7 @@ const NOON = new Date(2026, 9, 4, 12, 30).getTime()
 // What a person typing the command at the prompt looks like to the engine.
 const TYPED = { origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } } as const
 
-// The example plan of the skill, three waves, cut to what the tests need.
+// An example plan with three waves, cut to what the tests need.
 const EXAMPLE = newPlan(
   {
     project: 'hopto',

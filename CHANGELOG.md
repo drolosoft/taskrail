@@ -10,8 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `ARCHITECTURE.md`, and the release, testing and code style sections of `CONTRIBUTING.md`.
 
 ### Changed
+- The README says what the header counts, how the tiles are coloured, that `note` exists, and that a plan belongs to its session (a restart needs `--resume`).
 
 ### Fixed
 
