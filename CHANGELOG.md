@@ -12,9 +12,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 ### Changed
+
+### Fixed
+
+## [v0.1.1] - 2026-10-04
+
+### Changed
 - The GitHub Actions in CI and the release workflow are pinned to commit SHAs, with Dependabot proposing the bumps.
 
 ### Fixed
+- The command and tool descriptions and the mode hints said the board sits "under" the prompt; it sits above it, as the README and the band say.
+- 🚀, 🛑, 👻 and 🧟 now reach the header counts, and a 🛑 task outranks every other state on its wave's station; before, a wave of shipped or stopped tasks showed as pending.
+- The project example in the `plan` tool's schema no longer names private projects.
 
 ## [v0.1.0] - 2026-10-04
 

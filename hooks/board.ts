@@ -13,12 +13,13 @@ export const MODES: readonly WaveBoardMode[] = ['off', 'bar', 'full', 'both']
 // (box drawing, Latin, digits) is one. Text glyphs never carry state.
 const EMOJI = new Set([...'🥚🔧👀🩹🧪🟩🚀🔑👻🧟💥🥱🛑◾🟨🟥'])
 
-// The order in which the header counts the icons.
-const ORDER = ['🟩', '🔧', '👀', '🩹', '🧪', '🔑', '💥', '🥱', '🥚']
+// The order in which the header counts the icons: every icon the model
+// may set, finished work first and pending last.
+const ORDER = ['🟩', '🔧', '👀', '🩹', '🧪', '🚀', '🔑', '💥', '🛑', '👻', '🧟', '🥱', '🥚']
 
-// A wave's station shows its most urgent state: events first, then the
-// running stages, in this order.
-const URGENCY = ['🔑', '💥', '🧟', '👻', '🩹', '👀', '🧪', '🔧']
+// A wave's station shows its most urgent state: a stop first, then the
+// events, the running stages and a shipped task, in this order.
+const URGENCY = ['🛑', '🔑', '💥', '🧟', '👻', '🩹', '👀', '🧪', '🔧', '🚀']
 
 // The stages that count as "running" for the yellow tiles of the bar.
 const RUNNING = new Set(['🔧', '👀', '🩹', '🧪'])
@@ -385,13 +386,13 @@ export function applyUpdates(plan: WaveBoardPlan, input: SetInput, now: number):
 export function modeHint(mode: WaveBoardMode): string {
   switch (mode) {
     case 'off':
-      return 'mode off: the board is not drawn under the prompt; show it in the chat only when the user asks (mcp__taskrail__show).'
+      return 'mode off: the board is not drawn above the prompt; show it in the chat only when the user asks (mcp__taskrail__show).'
     case 'bar':
-      return 'mode bar: the one-line rail is already under the prompt; do not draw the board in the chat.'
+      return 'mode bar: the one-line rail is already above the prompt; do not draw the board in the chat.'
     case 'full':
-      return 'mode full: the board is already under the prompt; do not draw it in the chat.'
+      return 'mode full: the board is already above the prompt; do not draw it in the chat.'
     case 'both':
-      return 'mode both: the board is under the prompt AND is drawn in the chat at every milestone and close (mcp__taskrail__show).'
+      return 'mode both: the board is above the prompt AND is drawn in the chat at every milestone and close (mcp__taskrail__show).'
   }
 }
 

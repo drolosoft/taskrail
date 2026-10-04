@@ -64,7 +64,7 @@ async function loadMode($: EngineInterface): Promise<void> {
 const PLAN_SCHEMA = {
   type: 'object',
   properties: {
-    project: { type: 'string', description: 'Short project name, shown first in the bar (hopto, laporra-go).' },
+    project: { type: 'string', description: 'Short project name, shown first in the bar ("shop", "api").' },
     title: { type: 'string', description: 'The plan as the header names it: "plan 7 · cleanup".' },
     goal: { type: 'string', description: 'What the rail ends in, after 🚀: "v0.1.0", "cleanup → main".' },
     description: { type: 'string', description: 'What the whole plan does, two lines at most; written once.' },
@@ -105,14 +105,14 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'taskrail',
-      description: 'Wave board under the prompt: off, bar, full or both',
+      description: 'Wave board above the prompt: off, bar, full or both',
       argumentHint: '[off|bar|full|both]',
       immediate: true,
     })
     await $.tool.register({
       name: 'plan',
       description:
-        'Starts (or replaces) the wave board of this session: the plan\'s project, title, goal, description and its waves of task ids. Every task starts 🥚. The board is drawn under the prompt by the mod; call `set` on every state change.',
+        'Starts (or replaces) the wave board of this session: the plan\'s project, title, goal, description and its waves of task ids. Every task starts 🥚. The board is drawn above the prompt by the mod; call `set` on every state change.',
       inputSchema: PLAN_SCHEMA,
     })
     await $.tool.register({

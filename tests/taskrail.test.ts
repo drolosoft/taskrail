@@ -94,6 +94,28 @@ test('the rules of a narrow board are exactly its width plus the border', async 
   }
 })
 
+test('every icon reaches the header count and a stopped task outranks the rest', async () => {
+  const { plan } = applyUpdates(EXAMPLE, { tasks: { T1: '🟩', T4: '🛑', T5: '👀', T6: '🚀' } }, NOON)
+  const text = renderText(plan, 40)
+
+  expect(text).toContain('│ plan 7 · cleanup · 1 of 6 · 12:30 · 🟩 1 · 👀 1 · 🚀 1 · 🛑 1 · 🥚 2')
+  expect(text).toContain('│ main 🥚 A 1/3 ┄🛑 B 0/2 ┄🚀 C 0/1 ┄▶ 🚀 cleanup → main')
+})
+
+test('the tool results place the board above the prompt, as the band does', async ($, on) => {
+  mockWorld(on)
+
+  const planned = await $.tool.call({
+    tool: 'mcp__taskrail__plan',
+    project: 'demo',
+    title: 'plan 1',
+    goal: 'v1',
+    waves: [{ name: 'A', tasks: ['T1'] }],
+  })
+  expect(String(planned.result)).toContain('above the prompt')
+  expect(String(planned.result)).not.toContain('under the prompt')
+})
+
 test('set refuses to run before a plan exists', async ($, on) => {
   mockWorld(on)
 

@@ -48,7 +48,7 @@ The mod registers three tools. Claude calls them on its own when it runs a plan 
 | `set` | Updates task icons by id, the key line, the goal, the title or the description. Its result tells Claude what the current mode asks of the chat. |
 | `show` | Returns the board as text, for the chat. |
 
-Icons: 🥚 pending · 🔧 working · 👀 in review · 🩹 fixing · 🧪 testing · 🟩 merged · 🚀 shipped · 🔑 needs you · 👻 missing · 🧟 stale · 💥 broken · 🥱 idle · 🛑 stopped. A wave's station shows the most urgent state among its tasks.
+Icons: 🥚 pending · 🔧 working · 👀 in review · 🩹 fixing · 🧪 testing · 🟩 merged · 🚀 shipped · 🔑 needs you · 👻 missing · 🧟 stale · 💥 broken · 🥱 idle · 🛑 stopped. The header counts every icon in use. A wave's station is 🟩 when every task is merged; otherwise it shows the most pressing state among its tasks, in this order: 🛑 🔑 💥 🧟 👻 🩹 👀 🧪 🔧 🚀, else 🥚. The progress bar and the "N of M" count only 🟩.
 
 The plan lives in the session's plugin state and in the plugin store, so it survives `/clear`, `/resume` and a restart of Claude Code.
 
