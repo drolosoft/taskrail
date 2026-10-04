@@ -1,7 +1,12 @@
 {
   "name": "taskrail",
+  "displayName": "Taskrail",
   "version": "0.1.0",
-  "description": "Draws the wave board of the session's plan above the prompt, with /taskrail to pick off, bar, full or both, and tools the model updates it with",
-  "author": { "name": "Juan Moreno (txeo)" },
+  "description": "A live wave board of your session's plan above the prompt: waves, tasks and their state, kept current by Claude through three tools and switched with /taskrail.",
+  "author": { "name": "Drolosoft", "email": "forge@drolosoft.com", "url": "https://drolosoft.com" },
+  "license": "MIT",
+  "repository": "https://github.com/drolosoft/taskrail",
+  "homepage": "https://drolosoft.com/taskrail.html",
+  "keywords": ["claude-code", "mod", "plugin", "task-board", "plan", "progress", "terminal-ui"],
   "types": "./types/index.d.ts"
 }

@@ -1,0 +1,42 @@
+name: Bug report
+description: Something in taskrail does not work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. Please leave your own plan's texts out of the report if they are private.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+      placeholder: |
+        1. Claude called the plan tool with two waves
+        2. Ran /taskrail bar
+        3. The band still showed the whole board
+    validations:
+      required: true
+  - type: input
+    id: claude-version
+    attributes:
+      label: Claude Code version
+      description: Run `claude --version`.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where it runs
+      options:
+        - Terminal
+        - Desktop app, Code tab
+        - IDE extension
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: The dim transcript line naming taskrail, or the `claude --debug` output from around the problem.
+      render: text
