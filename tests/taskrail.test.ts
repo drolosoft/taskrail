@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { applyUpdates, cells, newPlan, pad, renderBar, renderFull, renderText } from '../hooks/board'
@@ -240,4 +241,71 @@ test('/resume reloads the mode and the plan from the store', async ($, on) => {
   await $.classic.SessionStart({ source: 'resume' })
   // No "(no plan in this session)" suffix: the stored plan loaded too.
   expect((await $.command.run({ command: 'taskrail', args: '', ...TYPED })).text).toBe('board: mode off')
+})
+
+// The band's props as the terminal stamps them, with no survey up.
+const BAND = {
+  plugin: 'taskrail',
+  component: 'AbovePrompt',
+  surface: 'terminal',
+  props: { hasSurvey: false, isWorking: false, maxRows: 20, bodyColumns: 80, scroll: { offset: 0, bodyRows: 20 }, view: {} },
+} as const
+
+// The line another mod beneath this one draws (envrail's, say).
+const OTHER_LINE = '🌐 auris │ 📦 prod 3df4d5e ✅ │ 🕐 12:30'
+
+/** Starts a one-wave plan through the tool, as the model would. */
+async function startPlan($: Engine): Promise<void> {
+  await $.tool.call({ tool: 'mcp__taskrail__plan', project: 'hopto', title: 'plan 9', goal: 'v2', waves: [{ name: 'A', tasks: ['T1'] }] })
+}
+
+/** The texts of a mounted band, top to bottom. */
+async function bandTexts(ui: { findAll: (query: { type: 'Text' }) => Promise<{ text: string }[]> }): Promise<string[]> {
+  const texts = await ui.findAll({ type: 'Text' })
+
+  return texts.map(text => text.text)
+}
+
+test('the board keeps what another mod drew beneath and goes after it, in bar and full', async ($, on) => {
+  mockWorld(on)
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return Text({ dimColor: true, children: [OTHER_LINE] })
+  })
+
+  await startPlan($)
+
+  await $.command.run({ command: 'taskrail', args: 'bar', ...TYPED })
+  const barred = await $.ui.mount(BAND)
+  const barTexts = await bandTexts(barred)
+  expect(barTexts[0]).toBe(OTHER_LINE)
+  expect(barTexts[1]).toMatch(/hopto · plan 9 · 12:30/)
+  expect(barTexts).toHaveLength(2)
+  await barred.unmount()
+
+  await $.command.run({ command: 'taskrail', args: 'full', ...TYPED })
+  const full = await $.ui.mount(BAND)
+  const fullTexts = await bandTexts(full)
+  expect(fullTexts[0]).toBe(OTHER_LINE)
+  expect(fullTexts.slice(1).some(text => text.includes('plan 9'))).toBe(true)
+  await full.unmount()
+})
+
+test('with nothing drawn beneath the board is alone, and a survey takes the band whole', async ($, on) => {
+  mockWorld(on)
+  // Beneath, no other mod: the engine answers with its own node, which
+  // draws nothing in the band while no survey holds it.
+  on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'engine', ref: 0 }))
+
+  await startPlan($)
+  await $.command.run({ command: 'taskrail', args: 'bar', ...TYPED })
+
+  const alone = await $.ui.mount(BAND)
+  expect(await bandTexts(alone)).toHaveLength(1)
+  expect(await alone.drawn()).toMatchObject({ children: [{ type: 'engine', ref: 0 }, { type: 'Box' }] })
+  await alone.unmount()
+
+  const surveyed = await $.ui.mount({ ...BAND, props: { ...BAND.props, hasSurvey: true } })
+  expect(await surveyed.drawn()).toEqual({ type: 'engine', ref: 0 })
+  await surveyed.unmount()
 })

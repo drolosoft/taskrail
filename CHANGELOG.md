@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The board no longer hides another mod's band above the prompt (envrail's line, say): it keeps what the mods beneath it drew and goes after it, and when none draws it is alone as before.
+
 ## [v0.1.2] - 2026-10-04
 
 ### Added

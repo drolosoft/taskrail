@@ -18,7 +18,10 @@ Two source files with one rule between them:
 - `hooks/register.tsx` is the only file that talks to the engine: it
   registers the `/taskrail` command and the `plan`, `set` and `show`
   tools at `session.start`, keeps the plan and the mode, and draws the
-  band in `ui.render` for the `AbovePrompt` component.
+  band in `ui.render` for the `AbovePrompt` component. The band is shared:
+  the hook keeps whatever the hooks beneath it drew (another mod's line)
+  and puts the board after it, so a short status line stays on top and
+  the board is what scrolls when the band runs out of rows.
 
 `types/index.d.ts` declares the plan types, the shape of the mod's state
 and the inputs of the three tools for the engine's type layer. The tools

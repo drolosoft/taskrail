@@ -230,12 +230,26 @@ export const register: Register = on => {
       return next(e)
     }
 
+    // The band is one strip shared by every mod: what the hooks beneath this
+    // one drew (envrail's line, say) is kept, never replaced. When nobody
+    // beneath draws, the engine's own node draws nothing and the board is
+    // alone.
+    const others = await next(e)
+
     const { Box, Text } = $.ui.resolve(e)
 
+    // The board goes after what it got. Short status lines stay on top,
+    // where a band taller than its rows starts showing, and the board, the
+    // one tree that can outgrow the band, is what scrolls; envrail puts its
+    // line before what it gets, so the order holds whichever of the two
+    // mods the engine calls first.
     if (shown === 'bar') {
       return (
-        <Box>
-          <Text wrap="truncate-end">{renderBar(current)}</Text>
+        <Box flexDirection="column">
+          {others}
+          <Box>
+            <Text wrap="truncate-end">{renderBar(current)}</Text>
+          </Box>
         </Box>
       )
     }
@@ -247,6 +261,7 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
+        {others}
         {lines.map(segments => (
           <Box flexDirection="row">
             {segments.map(segment => (
