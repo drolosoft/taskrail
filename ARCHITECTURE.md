@@ -8,20 +8,35 @@ tools. There is no build step, no dependency and no process of its own.
 
 ## How it works
 
-Two source files with one rule between them:
+Three source files with one rule between them:
 
 - `hooks/board.ts` holds the plan model and every drawing function
   (`renderFull`, `renderBar`, `renderText`, `headerLine`, `modeHint`,
   `newPlan`, `applyUpdates`). It never touches `$`, so it can be tested as
   plain functions and `claude plugin validate` can still see every engine
   call the mod makes.
+- `hooks/auto.ts` holds the rules that turn the engine's agent events into
+  task moves (`taskOf`, `onSpawn`, `onPermission`, `onToolStart`,
+  `onComplete`), pure like the board: each takes the plan and the links
+  between agents and tasks and returns the new ones with a `changed` flag,
+  so the hooks module writes nothing when a rule had nothing to say.
 - `hooks/register.tsx` is the only file that talks to the engine: it
   registers the `/taskrail` command and the `plan`, `set` and `show`
-  tools at `session.start`, keeps the plan and the mode, and draws the
-  band in `ui.render` for the `AbovePrompt` component. The band is shared:
-  the hook keeps whatever the hooks beneath it drew (another mod's line)
-  and puts the board after it, so a short status line stays on top and
-  the board is what scrolls when the band runs out of rows.
+  tools at `session.start`, keeps the plan, the mode and the links, hooks
+  `agent.spawn`, `turn.complete`, `classic.PermissionRequest` and
+  `tool.call` for the rules, and draws the band in `ui.render` for the
+  `AbovePrompt` component. The band is shared: the hook keeps whatever the
+  hooks beneath it drew (another mod's line) and puts the board after it,
+  so a short status line stays on top and the board is what scrolls when
+  the band runs out of rows.
+
+Every hook that is not the mod's own tool call runs its work inside a
+`try` and passes the event on whatever happened: a failure is written once
+to the transcript (`noteFailure`, one dim line under the mod's name) and
+the spawn, the turn, the tool call or the band go through. The band
+computes its drawing before asking the hooks beneath it, so a plan the
+renderer cannot draw leaves the band to the other mods instead of taking
+it down.
 
 `types/index.d.ts` declares the plan types, the shape of the mod's state
 and the inputs of the three tools for the engine's type layer. The tools
@@ -34,6 +49,7 @@ only list the MCP servers a session had connected, never a mod's own tools.
 |---|---|---|
 | The plan | session state (`$.state`, reactive) and the plugin store under `plan:<session id>` | the state redraws the band on every change; the store survives `/resume` and a restart followed by `--resume` |
 | The mode | the plugin store under `mode`, one value per machine | the choice is a preference, not part of a plan |
+| The links (agent id → task, and the icon held during a permission) | session state only | an agent does not outlive its session, so there is nothing to bring back after `/resume`; a new `plan` empties them |
 
 `/clear`, `/resume` and a fork reset the session state and do not fire
 `session.start`; the mod listens to `classic.SessionStart` with those
@@ -57,6 +73,17 @@ loading.
   tells Claude what the current mode asks of the chat, so Claude never has
   to read a settings file.
 - `show` returns `renderText` at the default width, for the chat.
+- The event rules (`hooks/auto.ts`) find a task by its id as a whole word
+  in the spawn's description, then its name, longest id first (`T12`
+  before `T1`, `rev` never inside `review`). A spawn makes the task 🔧
+  only from 🥚 🥱 👻 🧟, but ties the agent either way, so a reviewer's
+  permission or end still reaches the task. A permission holds the task at
+  🔑 from a running state (🔧 👀 🩹 🧪) and keeps the icon it had; the
+  agent's next tool call gives it back unless the model moved the task
+  meanwhile. The end of a turn moves 🔧 or 🔑 to 👀 on an answer, and
+  anything not 🟩 or 🚀 to 💥 on an error or a refusal, 🛑 on an
+  interruption. The main loop's own events carry no agent id and change
+  nothing.
 
 ## Drawing
 

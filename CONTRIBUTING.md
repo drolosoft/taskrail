@@ -31,11 +31,15 @@ that talks to the engine lives in `hooks/register.tsx`. See
 
 ## Testing
 
-Tests live in `tests/taskrail.test.ts` and use the kit from
-`claude-code/testing`. Drawing is tested as plain functions
-(`renderText(plan, 40)`, `renderBar`); the command, the tools and the band
-run through `$` with a mocked clock, store and session id (`mockWorld`).
-The band is mounted on both the terminal and the desktop surfaces. CI runs
+Tests live in `tests/taskrail.test.ts` and `tests/auto.test.ts` and use the
+kit from `claude-code/testing`. Drawing and the event rules are tested as
+plain functions (`renderText(plan, 40)`, `renderBar`, `onSpawn`,
+`onPermission`); the command, the tools, the agent events and the band run
+through `$` with a mocked clock, store and session id (`mockWorld`). The
+band is mounted on both the terminal and the desktop surfaces. A test's
+`$.tool.call` runs in the session's own loop and carries no `agentId`, so
+the release of a 🔑 task on the agent's next call is proven on the pure
+rule alone. CI runs
 the same `claude plugin test .`, plus `scripts/changelog-section_test.sh`,
 which guards the script that turns a CHANGELOG section into release notes.
 

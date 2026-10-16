@@ -291,6 +291,50 @@ test('the board keeps what another mod drew beneath and goes after it, in bar an
   await full.unmount()
 })
 
+test('the agent events move a task on their own: 🔧 on spawn, 🔑 on a permission, 👀 at the end', async ($, on) => {
+  mockWorld(on)
+  // The engine beneath: a spawn that starts an agent, a permission the
+  // person answers, a turn that ends.
+  on('agent.spawn', () => ({ model: 'opus', agentId: 'ag-1' }))
+  on('classic.PermissionRequest', () => ({}))
+  on('turn.complete', () => ({ text: '' }))
+
+  await startPlan($)
+
+  /** The task rows of the board, as `show` prints them. */
+  async function board(): Promise<string> {
+    return String((await $.tool.call({ tool: 'mcp__taskrail__show' })).result)
+  }
+
+  // A spawn as the engine stamps it: the Agent tool's call, the resolved
+  // type and the loop that asked for it.
+  await $.agent.spawn({
+    tool_use_id: 'toolu-1',
+    prompt: 'Implement the first task',
+    description: 'Implement T1',
+    subagentType: 'general-purpose',
+    provider: { plugin: 'engine', tier: 'core' },
+    parentModel: 'opus',
+    background: false,
+    fork: false,
+  })
+  expect(await board()).toContain('🔧 T1')
+
+  await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'ls' }, agent_id: 'ag-1' })
+  expect(await board()).toContain('🔑 T1')
+
+  // A test's `$.tool.call` runs in the session's own loop and carries no
+  // `agentId`, so the release on the agent's next call is proven on the
+  // pure rule alone (tests/auto.test.ts); a held task that answers goes
+  // to review the same way a working one does.
+  await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 'turn-1', agentId: 'ag-1', reason: 'answer' })
+  expect(await board()).toContain('👀 T1')
+
+  // The main loop's own events name no agent and leave the board alone.
+  await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 'turn-2', reason: 'error' })
+  expect(await board()).toContain('👀 T1')
+})
+
 test('with nothing drawn beneath the board is alone, and a survey takes the band whole', async ($, on) => {
   mockWorld(on)
   // Beneath, no other mod: the engine answers with its own node, which

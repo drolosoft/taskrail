@@ -2,11 +2,15 @@
 // (reactive, survives a hot reload) with a copy in `$.store` per session id
 // (survives /resume and a restart; /clear drops it). The band above the
 // prompt draws it; `/taskrail` picks the mode; the model updates it through
-// three tools.
+// three tools, and the engine's own agent events move the tasks the model
+// has not reported yet (hooks/auto.ts).
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { WaveBoardMode, WaveBoardPlan } from '../types'
+import type { AgentLinks, WaveBoardMode, WaveBoardPlan } from '../types'
+import { onComplete, onPermission, onSpawn, onToolStart } from './auto'
+import type { AutoResult } from './auto'
+import type { Segment } from './board'
 import {
   applyUpdates,
   headerLine,
@@ -25,8 +29,45 @@ const plan = atom({ plugin: 'taskrail', key: 'plan' } as const, null)
 // What the band shows; the whole board by default.
 const mode = atom({ plugin: 'taskrail', key: 'mode' } as const, 'full')
 
+// The subagents the engine reported, each tied to a task. Session state
+// only: an agent does not outlive its session, so nothing goes to the store.
+const links = atom({ plugin: 'taskrail', key: 'agents' } as const, {} as AgentLinks)
+
 // The store key of the mode, shared by every session on this machine.
 const MODE_KEY = 'mode'
+
+// The last failure written to the transcript, so a hook that breaks on
+// every event (a render, say) says so once and not on every redraw.
+let lastFailure: string | null = null
+
+/**
+ * The text of an error for a log line, whatever was thrown.
+ *
+ * @param err what a call rejected with
+ * @returns its message, or the value as text
+ */
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
+
+/**
+ * Writes one dim line under the mod's name when a hook fails, instead of
+ * letting the failure take the event down with it. The same text is not
+ * repeated while it keeps happening.
+ *
+ * @param where the hook that failed
+ * @param err what it threw
+ */
+function noteFailure($: EngineInterface, where: string, err: unknown): void {
+  const text = `taskrail: ${where} failed: ${errorText(err)}`
+
+  if (text === lastFailure) {
+    return
+  }
+
+  lastFailure = text
+  $.ui.log(text)
+}
 
 /** The store key of this session's plan. */
 async function planKey($: EngineInterface): Promise<string> {
@@ -49,6 +90,20 @@ async function loadPlan($: EngineInterface): Promise<void> {
   if (stored !== undefined) {
     await update($, plan, () => stored as WaveBoardPlan)
   }
+}
+
+/**
+ * Writes what an event rule decided: the plan when it moved a task, the
+ * links when an agent was tied or released. A rule that changed nothing
+ * writes nothing, so the band is not redrawn for every tool call.
+ */
+async function applyAuto($: EngineInterface, outcome: AutoResult): Promise<void> {
+  if (!outcome.changed) {
+    return
+  }
+
+  await update($, links, () => outcome.links)
+  await savePlan($, outcome.plan)
 }
 
 /** Loads the mode the user last chose, kept in the store across sessions. */
@@ -114,8 +169,11 @@ async function registerCommand($: EngineInterface): Promise<void> {
       argumentHint: '[off|bar|full|both]',
       immediate: true,
     })
-  } catch {
-    // The user's own /taskrail stays; the tools still carry the board.
+  } catch (err) {
+    // The user's own /taskrail stays; the tools still carry the board. One
+    // line says why the mod's command is missing, where a silent catch left
+    // the person guessing.
+    $.ui.log(`taskrail: /taskrail not registered (${errorText(err)}); the tools and the board still work`)
   }
 }
 
@@ -129,13 +187,13 @@ export const register: Register = on => {
     await $.tool.register({
       name: 'plan',
       description:
-        'Starts (or replaces) the wave board of this session: the plan\'s project, title, goal, description and its waves of task ids. Every task starts 🥚. The board is drawn above the prompt by the mod; call `set` on every state change.',
+        'Starts (or replaces) the wave board of this session: the plan\'s project, title, goal, description and its waves of task ids. Every task starts 🥚. The board is drawn above the prompt by the mod. Put the task id in the description of every Agent call for it ("Implement T4"): the mod then follows the engine\'s events on its own (🔧 on spawn, 🔑 while the agent waits for approval, 👀/💥/🛑 when its turn ends); call `set` for what the engine cannot see.',
       inputSchema: PLAN_SCHEMA,
     })
     await $.tool.register({
       name: 'set',
       description:
-        'Updates the wave board of this session: task icons by id, the key line (note), goal, title or description. Call it on EVERY state change (an implementer reports, a review lands, a merge, CI), never by editing files. Its result says what the current mode asks of the chat.',
+        'Updates the wave board of this session: task icons by id, the key line (note), goal, title or description. The mod already moves a task from the engine\'s events when its id is in the Agent call\'s description (🔧 spawn, 🔑 waiting for approval, 👀/💥/🛑 at the turn\'s end); call `set` for everything else (🩹 🧪 🟩 🚀, a merge, CI, the note), never by editing files. What you set stays until an event has something new to say. Its result says what the current mode asks of the chat.',
       inputSchema: SET_SCHEMA,
     })
     await $.tool.register({
@@ -192,6 +250,9 @@ export const register: Register = on => {
     }
 
     const created = newPlan(e, await $.clock.now())
+    // A new plan starts with no agent tied to it: the old links named tasks
+    // of the plan it replaces.
+    await update($, links, () => ({}))
     await savePlan($, created)
 
     return { result: `${headerLine(created)}\n${modeHint(await read($, mode))}` }
@@ -222,11 +283,97 @@ export const register: Register = on => {
     return { result: renderText(current) }
   })
 
+  // The engine's agent events, each one a rule of hooks/auto.ts over the
+  // plan. Every hook passes the event on whatever happens: a rule that
+  // throws is noted once and the spawn, the call or the turn goes through.
+
+  on('agent.spawn', async ($, e, next) => {
+    const result = await next(e)
+
+    try {
+      const current = await read($, plan)
+
+      if (current !== null && result.agentId !== undefined) {
+        const spawn = { agentId: result.agentId, description: e.description, name: e.name }
+
+        await applyAuto($, onSpawn(current, await read($, links), spawn, await $.clock.now()))
+      }
+    } catch (err) {
+      noteFailure($, 'agent.spawn', err)
+    }
+
+    return result
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    try {
+      const current = await read($, plan)
+
+      if (current !== null && e.agentId !== undefined) {
+        const end = { agentId: e.agentId, reason: e.reason }
+
+        await applyAuto($, onComplete(current, await read($, links), end, await $.clock.now()))
+      }
+    } catch (err) {
+      noteFailure($, 'turn.complete', err)
+    }
+
+    return next(e)
+  })
+
+  on('classic.PermissionRequest', async ($, e, next) => {
+    try {
+      const current = await read($, plan)
+
+      if (current !== null && e.agent_id !== undefined) {
+        await applyAuto($, onPermission(current, await read($, links), e.agent_id, await $.clock.now()))
+      }
+    } catch (err) {
+      noteFailure($, 'PermissionRequest', err)
+    }
+
+    return next(e)
+  })
+
+  // Registered after the mod's own tool hooks: those answer without `next`,
+  // and run on the main loop anyway, where there is no agent to release.
+  on('tool.call', async ($, e, next) => {
+    try {
+      const current = await read($, plan)
+
+      if (current !== null && e.agentId !== undefined) {
+        await applyAuto($, onToolStart(current, await read($, links), e.agentId, await $.clock.now()))
+      }
+    } catch (err) {
+      noteFailure($, 'tool.call', err)
+    }
+
+    return next(e)
+  })
+
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const current = await read($, plan)
     const shown: WaveBoardMode = await read($, mode)
 
     if (e.props.hasSurvey || current === null || shown === 'off') {
+      return next(e)
+    }
+
+    // The rules stretch to the band's width, as the status line script
+    // stretched them to the terminal's; two cells short so nothing wraps.
+    const width = Math.max(40, e.props.bodyColumns - 2)
+
+    // The drawing is computed before anything beneath is asked: a plan the
+    // renderer cannot draw (one an older version stored, say) must leave
+    // the band to the other mods, noted once, not take it down.
+    let bar: string
+    let lines: Segment[][]
+    try {
+      bar = renderBar(current)
+      lines = renderFull(current, width)
+    } catch (err) {
+      noteFailure($, 'ui.render', err)
+
       return next(e)
     }
 
@@ -248,16 +395,11 @@ export const register: Register = on => {
         <Box flexDirection="column">
           {others}
           <Box>
-            <Text wrap="truncate-end">{renderBar(current)}</Text>
+            <Text wrap="truncate-end">{bar}</Text>
           </Box>
         </Box>
       )
     }
-
-    // The rules stretch to the band's width, as the status line script
-    // stretched them to the terminal's; two cells short so nothing wraps.
-    const width = Math.max(40, e.props.bodyColumns - 2)
-    const lines = renderFull(current, width)
 
     return (
       <Box flexDirection="column">

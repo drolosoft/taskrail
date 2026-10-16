@@ -52,11 +52,24 @@ The mod registers three tools. Claude calls them on its own when it runs a plan 
 
 Icons: 🥚 pending · 🔧 working · 👀 in review · 🩹 fixing · 🧪 testing · 🟩 merged · 🚀 shipped · 🔑 needs you · 👻 missing · 🧟 stale · 💥 broken · 🥱 idle · 🛑 stopped. The header counts each of these icons in use. A wave's station is 🟩 when every task is merged; otherwise it shows the most pressing state among its tasks, in this order: 🛑 🔑 💥 🧟 👻 🩹 👀 🧪 🔧 🚀, else 🥚. The "N of M" counts 🟩 only; the tiles are green for 🟩, yellow for the running states (🔧 👀 🩹 🧪, at least one tile while anything runs) and red for the rest. `plan` and `set` also take a `note`, the key line under the rail.
 
-The plan lives in the session's plugin state and in the plugin store under the session id, so it survives `/resume`, including a restart of Claude Code followed by `--resume`. `/clear` drops the plan along with the conversation, and a new session starts with no plan.
+### What moves on its own
+
+Claude does not have to report everything. The mod listens to the engine's own agent events and moves a task when they are clear enough:
+
+| Event | What the board does |
+|---|---|
+| A subagent is spawned whose description or name carries a task id (`Implement T4`) | ties the agent to the task; a task nobody was on (🥚 🥱 👻 🧟) becomes 🔧 |
+| That agent asks you for a permission | the task becomes 🔑 while it waits |
+| The agent calls its next tool | the task takes back the icon it had |
+| The agent's turn ends | an answer hands a working task (🔧 🔑) to 👀; an error or a refusal makes it 💥; an interruption 🛑 |
+
+A task that is 🟩 or 🚀 is never touched, and `set` still has the last word: an icon Claude sets stays until an event with something new to say. Name the task id in each `Agent` call's description and the board follows it.
+
+The plan lives in the session's plugin state and in the plugin store under the session id, so it survives `/resume`, including a restart of Claude Code followed by `--resume`. `/clear` drops the plan along with the conversation, and a new session starts with no plan. The ties between agents and tasks live in the session only: agents do not survive a resume.
 
 ### What it reads and writes
 
-Nothing outside Claude Code. taskrail opens no network connection and reads or writes no file. It keeps the plan in the plugin's session state and in the plugin store, and draws it in the band above the prompt.
+Nothing outside Claude Code. taskrail opens no network connection and reads or writes no file. It keeps the plan in the plugin's session state and in the plugin store, and draws it in the band above the prompt. When one of its hooks fails (a plan the renderer cannot draw, say) it writes one dim line under its name in the transcript and lets the event through; it never takes a turn, a tool call or the band down with it.
 
 ### Requirements
 

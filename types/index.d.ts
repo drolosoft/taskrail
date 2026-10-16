@@ -36,6 +36,16 @@ export type PlanInput = {
   waves: { name: string; tasks: string[] }[]
 }
 
+/**
+ * A subagent the engine reported, tied to the task its spawn named.
+ * `before` is the icon the task had when the agent asked for a permission,
+ * to give back once the person has answered; null while nothing is held.
+ */
+export type AgentLink = { task: string; before: string | null }
+
+/** The links of this session, by agent id. Agents do not outlive a session, so neither do these. */
+export type AgentLinks = Record<string, AgentLink>
+
 /** What the `set` tool receives: icons per task id and the optional text fields. */
 export type SetInput = {
   tasks?: Record<string, string>
@@ -59,6 +69,7 @@ declare module 'claude-code' {
     'taskrail': {
       plan: WaveBoardPlan | null
       mode: WaveBoardMode
+      agents: AgentLinks
     }
   }
 }
