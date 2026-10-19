@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.2.0] - 2026-10-19
+
 ### Added
 - The engine's agent events move tasks on their own (`hooks/auto.ts`): a subagent spawned with a task id in its description makes that task 🔧, a permission request from it 🔑 (the previous icon comes back on its next tool call), and the end of its turn 👀, 💥 or 🛑. Merged and shipped tasks are never touched; `set` still has the last word.
 - Every hook survives its own failure: one dim line under the mod's name in the transcript, and the turn, the tool call or the band goes on. A refused `/taskrail` says so there too, instead of vanishing in silence.
