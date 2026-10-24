@@ -9,8 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.2.1] - 2026-10-24
+
 ### Added
 - Skill `running-waves`: the rules that keep a multi-task plan fast (subagents never wait on each other's processes, own port and server per worktree, long commands in the background, only the tests of what changed while iterating, no rebuild without a change, short briefs, independent plans at once, measure before carrying on). Claude loads it when it runs a plan on the board.
+
+### Fixed
+- `set` no longer accepts an icon the board cannot count. ✅ (and ✔️, ☑️) now mean 🟩, so a task marked that way counts as merged instead of sitting at 0 of N forever; any other unknown icon is refused, the task keeps the icon it had and the tool result names it with the valid list.
 
 ## [v0.2.0] - 2026-10-19
 
