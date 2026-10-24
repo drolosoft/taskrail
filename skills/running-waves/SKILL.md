@@ -38,6 +38,9 @@ rebuilt the same server on every pass. These rules are what came out of it.
 
 - Several tasks sit in 🔧 at the same time while their subagents work; one
   🔧 at a time means the waves are being run in series.
+- When `set` answers `wave A: 2 tasks pending and 1 working; independent
+  tasks can run at once.`, start the pending tasks of that wave now instead
+  of one after another.
 - A task waiting on another task's process is 🥱, and the key line says what
   it waits for. If that happens, split the shared resource instead of
   waiting.

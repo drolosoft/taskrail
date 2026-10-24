@@ -560,6 +560,29 @@ export function markStale(plan: WaveBoardPlan, now: number, limit: number): { pl
 }
 
 /**
+ * One line per wave that looks run in series: a wave that has begun (one
+ * of its tasks has left 🥚), still has two or more tasks in 🥚 and at most
+ * one in a running stage (🔧 👀 🩹 🧪). A fresh plan and a wave nobody has
+ * started say nothing, so the line never nags before the work begins. For
+ * the model only: the board never shows it.
+ * @returns the lines, none when every wave runs its tasks at once
+ */
+export function serialWarnings(plan: WaveBoardPlan): string[] {
+  return plan.waves.flatMap(wave => {
+    const icons = waveIcons(wave)
+    const pending = icons.filter(icon => icon === '🥚').length
+    const working = icons.filter(icon => RUNNING.has(icon)).length
+    const hasBegun = pending < icons.length
+
+    if (!hasBegun || pending < 2 || working > 1) {
+      return []
+    }
+
+    return [`wave ${wave.name}: ${pending} tasks pending and ${working} working; independent tasks can run at once.`]
+  })
+}
+
+/**
  * The line the tools append for the model: what the current mode asks of
  * the chat, so the model never has to read a settings file.
  */

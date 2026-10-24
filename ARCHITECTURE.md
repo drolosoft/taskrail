@@ -68,7 +68,9 @@ loading.
 - `plan` refuses an input without at least one wave; every task starts 🥚.
 - `set` refuses to run before a plan exists; task ids the plan does not
   know are ignored and listed in the result, so one typo never drops the
-  whole update.
+  whole update. Its result also carries one line per wave that looks run
+  in series (`serialWarnings`: begun, two or more tasks in 🥚, at most one
+  running); the board never shows it.
 - Every tool result ends with the mode hint (`modeHint`), the line that
   tells Claude what the current mode asks of the chat, so Claude never has
   to read a settings file.

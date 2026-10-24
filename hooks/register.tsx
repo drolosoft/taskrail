@@ -25,6 +25,7 @@ import {
   renderBar,
   renderFull,
   renderText,
+  serialWarnings,
 } from './board'
 
 // The plan of the session, null until the model creates one.
@@ -335,6 +336,10 @@ export const register: Register = on => {
       const pairs = rejected.map(([id, icon]) => `${id} ${icon}`).join(', ')
       warnings.push(`unknown icons, tasks kept as they were: ${pairs}. Valid icons: ${ICONS}`)
     }
+
+    // A wave whose tasks are being started one at a time is told so here,
+    // where the model reads it, and never on the board the person sees.
+    warnings.push(...serialWarnings(changed))
 
     const warning = warnings.map(line => `\n${line}`).join('')
 

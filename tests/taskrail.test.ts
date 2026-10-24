@@ -2,7 +2,20 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { STALE_AFTER_MS, applyUpdates, cells, duration, markStale, newPlan, pad, renderBar, renderFull, renderText, staleTasks } from '../hooks/board'
+import {
+  STALE_AFTER_MS,
+  applyUpdates,
+  cells,
+  duration,
+  markStale,
+  newPlan,
+  pad,
+  renderBar,
+  renderFull,
+  renderText,
+  serialWarnings,
+  staleTasks,
+} from '../hooks/board'
 import type { WaveBoardPlan } from '../types'
 
 // A fixed instant, so the HH:MM in the header is the same on every run.
@@ -501,4 +514,58 @@ test('set, show and the band turn a task nobody touched for fifteen minutes into
   // The zombie is stored, and a set brings it back as any other move.
   const revived = await $.tool.call({ tool: 'mcp__taskrail__set', tasks: { T1: '🩹' } })
   expect(String(revived.result)).toContain('🔧 1 · 🩹 1')
+})
+
+/** The example plan with some icons set at noon, as `set` would leave it. */
+function withIcons(tasks: Record<string, string>): WaveBoardPlan {
+  return applyUpdates(EXAMPLE, { tasks }, NOON).plan
+}
+
+test('no serial warning on a fresh plan, nor for a wave none of whose tasks has left 🥚', () => {
+  expect(serialWarnings(EXAMPLE)).toEqual([])
+
+  // Wave A closed and wave B not begun: B is next, not run in series.
+  expect(serialWarnings(withIcons({ T1: '🟩', T2: '🟩', T3: '🟩' }))).toEqual([])
+})
+
+test('a started wave with two or more tasks in 🥚 and at most one running gets one line', () => {
+  expect(serialWarnings(withIcons({ T1: '🔧' }))).toEqual([
+    'wave A: 2 tasks pending and 1 working; independent tasks can run at once.',
+  ])
+
+  // One done and nothing running is the same pattern, one task at a time.
+  expect(serialWarnings(withIcons({ T1: '🟩', T4: '👀' }))).toEqual([
+    'wave A: 2 tasks pending and 0 working; independent tasks can run at once.',
+  ])
+})
+
+test('no serial warning for a started wave with two running, or with fewer than two in 🥚', () => {
+  expect(serialWarnings(withIcons({ T1: '🔧', T2: '🧪' }))).toEqual([])
+  expect(serialWarnings(withIcons({ T1: '🟩', T2: '🟩' }))).toEqual([])
+  expect(serialWarnings(withIcons({ T4: '🔧' }))).toEqual([])
+})
+
+test('the serial warning reaches the set result only, never the board', async ($, on) => {
+  mockWorld(on)
+
+  await $.tool.call({
+    tool: 'mcp__taskrail__plan',
+    project: 'hopto',
+    title: 'plan 7',
+    goal: 'v1',
+    waves: [{ name: 'A', tasks: ['T1', 'T2', 'T3'] }, { name: 'B', tasks: ['T4', 'T5'] }],
+  })
+
+  const noted = await $.tool.call({ tool: 'mcp__taskrail__set', note: 'starting' })
+  expect(String(noted.result)).not.toContain('independent tasks')
+
+  const serial = await $.tool.call({ tool: 'mcp__taskrail__set', tasks: { T1: '🔧' } })
+  expect(String(serial.result)).toContain('\nwave A: 2 tasks pending and 1 working; independent tasks can run at once.\n')
+  expect(String(serial.result)).not.toContain('wave B')
+
+  const shown = await $.tool.call({ tool: 'mcp__taskrail__show' })
+  expect(String(shown.result)).not.toContain('independent tasks')
+
+  const parallel = await $.tool.call({ tool: 'mcp__taskrail__set', tasks: { T2: '🔧', T3: '🔧' } })
+  expect(String(parallel.result)).not.toContain('independent tasks')
 })
