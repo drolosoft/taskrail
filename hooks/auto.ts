@@ -4,7 +4,7 @@
 // its turn says how it went. The model's `set` still has the last word;
 // these rules only move a task between the states the events can tell
 // apart, and never touch one that is already merged or shipped.
-import type { AgentLink, AgentLinks, WaveBoardPlan } from '../types'
+import type { AgentLink, AgentLinks, WaveBoardPlan, WaveBoardTask } from '../types'
 import { applyUpdates } from './board'
 
 /** What `turn.complete` says about why a subagent's turn ended. */
@@ -25,8 +25,14 @@ const FRESH = new Set(['🥚', '🥱', '👻', '🧟'])
 const RUNNING = new Set(['🔧', '👀', '🩹', '🧪'])
 
 // The states a finished turn hands over to review from: the agent was
-// working (or waiting for the person while working).
-const WORKING = new Set(['🔧', '🔑'])
+// working, waiting for the person while working, or quiet long enough for
+// the board to call the task stale.
+const WORKING = new Set(['🔧', '🔑', '🧟'])
+
+// A linked agent's tool calls keep its task from going stale, but writing
+// the plan on every call would redraw the band for each one: a touch older
+// than a minute is renewed, a newer one is left as it is.
+const TOUCH_EVERY_MS = 60 * 1000
 
 /**
  * The regular expression that finds a task id as a whole word, so `T1`
@@ -73,17 +79,22 @@ export function taskOf(plan: WaveBoardPlan, ...texts: Array<string | undefined>)
   return null
 }
 
-/** The icon of a task, or undefined when the plan has no such id. */
-export function iconOf(plan: WaveBoardPlan, id: string): string | undefined {
+/** The task with that id, or undefined when the plan has none. */
+function taskById(plan: WaveBoardPlan, id: string): WaveBoardTask | undefined {
   for (const wave of plan.waves) {
     const task = wave.tasks.find(candidate => candidate[0] === id)
 
     if (task !== undefined) {
-      return task[1]
+      return task
     }
   }
 
   return undefined
+}
+
+/** The icon of a task, or undefined when the plan has no such id. */
+export function iconOf(plan: WaveBoardPlan, id: string): string | undefined {
+  return taskById(plan, id)?.[1]
 }
 
 /** The result of a rule that moved nothing. */
@@ -150,16 +161,43 @@ export function onPermission(plan: WaveBoardPlan, links: AgentLinks, agentId: st
 }
 
 /**
+ * A linked agent that calls a tool is still on its task: the task's touch
+ * is renewed, so it does not go stale while the agent works. A touch less
+ * than a minute old is left alone, and a task out of the running stages
+ * (done, waiting, stale) is not the tool call's to change.
+ */
+function keepFresh(plan: WaveBoardPlan, links: AgentLinks, id: string, now: number): AutoResult {
+  const task = taskById(plan, id)
+
+  if (task === undefined || !RUNNING.has(task[1])) {
+    return unchanged(plan, links)
+  }
+
+  const touchedAt = task[2]?.touchedAt
+
+  if (touchedAt !== undefined && now - touchedAt < TOUCH_EVERY_MS) {
+    return unchanged(plan, links)
+  }
+
+  return { plan: withIcon(plan, id, task[1], now), links, changed: true }
+}
+
+/**
  * A linked agent called a tool: whatever permission it waited for was
  * answered, so a task still marked 🔑 by `onPermission` takes back the icon
  * it had. A task the model moved meanwhile keeps the model's choice; the
- * held icon is dropped either way.
+ * held icon is dropped either way. With nothing held, the call only keeps
+ * the task fresh.
  */
 export function onToolStart(plan: WaveBoardPlan, links: AgentLinks, agentId: string, now: number): AutoResult {
   const link = links[agentId]
 
-  if (link === undefined || link.before === null) {
+  if (link === undefined) {
     return unchanged(plan, links)
+  }
+
+  if (link.before === null) {
+    return keepFresh(plan, links, link.task, now)
   }
 
   const released = { ...links, [agentId]: { task: link.task, before: null } }
@@ -173,9 +211,10 @@ export function onToolStart(plan: WaveBoardPlan, links: AgentLinks, agentId: str
 
 /**
  * A linked agent's turn ended. An answer hands a task that was being
- * worked on to review; an error or a refusal breaks it and an interruption
- * stops it, from any state that is not settled. The link stays: a message
- * can wake the same agent later.
+ * worked on (or had gone quiet long enough to be stale) to review; an
+ * error or a refusal breaks it and an interruption stops it, from any
+ * state that is not settled. The link stays: a message can wake the same
+ * agent later.
  */
 export function onComplete(
   plan: WaveBoardPlan,

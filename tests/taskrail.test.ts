@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { applyUpdates, cells, duration, newPlan, pad, renderBar, renderFull, renderText } from '../hooks/board'
+import { STALE_AFTER_MS, applyUpdates, cells, duration, markStale, newPlan, pad, renderBar, renderFull, renderText, staleTasks } from '../hooks/board'
 import type { WaveBoardPlan } from '../types'
 
 // A fixed instant, so the HH:MM in the header is the same on every run.
@@ -439,4 +439,66 @@ test('a plan saved before task times loads and draws with no time, and times the
   const moved = String((await $.tool.call({ tool: 'mcp__taskrail__show' })).result)
   expect(moved).toContain('│      ├🟩 T1    ├🟩 T4       ╰🥚 T6')
   expect(moved).toContain('│      ├🥚 T2    ╰🔧 T5 · 12m')
+})
+
+test('staleTasks names the tasks in a running stage that nothing touched for longer than the limit', () => {
+  const started = applyUpdates(EXAMPLE, { tasks: { T1: '🔧', T2: '👀', T3: '🔑', T4: '🧪', T5: '🟩' } }, NOON).plan
+  const touched = applyUpdates(started, { tasks: { T2: '👀' } }, NOON + 10 * MINUTE).plan
+
+  // T2 was confirmed ten minutes in, T3 waits for the person and T5 is
+  // done: only T1 and T4 have gone a quarter of an hour without news.
+  expect(staleTasks(touched, NOON + 16 * MINUTE, STALE_AFTER_MS)).toEqual(['T1', 'T4'])
+
+  // Older than the limit, not as old as it.
+  expect(staleTasks(touched, NOON + 15 * MINUTE, STALE_AFTER_MS)).toEqual([])
+
+  // A task stored before the times existed has nothing to be old against.
+  expect(staleTasks(UNTIMED, NOON + 99 * MINUTE, STALE_AFTER_MS)).toEqual([])
+})
+
+test('a stale task turns 🧟 and keeps the key line, and the next set moves it on', () => {
+  const started = applyUpdates(EXAMPLE, { tasks: { T1: '🔧', T4: '🔧' }, note: '🔧 T1 and T4 at once' }, NOON).plan
+  const { plan: marked, stale } = markStale(started, NOON + 20 * MINUTE, STALE_AFTER_MS)
+
+  expect(stale).toEqual(['T1', 'T4'])
+
+  const text = renderText(marked, 40, NOON + 20 * MINUTE)
+  expect(text).toContain('├🧟 T1 · 20m')
+  expect(text).toContain('│ 🔧 T1 and T4 at once')
+
+  // Nothing stale: the same plan comes back, so nothing is written.
+  expect(markStale(started, NOON + MINUTE, STALE_AFTER_MS).plan).toBe(started)
+
+  const moved = applyUpdates(marked, { tasks: { T1: '🔧' } }, NOON + 21 * MINUTE).plan
+  expect(renderText(moved, 40, NOON + 21 * MINUTE)).toContain('├🔧 T1 · 21m')
+})
+
+test('set, show and the band turn a task nobody touched for fifteen minutes into 🧟', async ($, on) => {
+  const clock = mock.clock(on, { now: NOON })
+  mock.store(on)
+  on('session.id', () => ({ value: 'test-session' }))
+  on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'engine', ref: 0 }))
+
+  await $.tool.call({ tool: 'mcp__taskrail__plan', project: 'hopto', title: 'plan 9', goal: 'v2', waves: [{ name: 'A', tasks: ['T1', 'T2'] }] })
+  await $.tool.call({ tool: 'mcp__taskrail__set', tasks: { T1: '🔧', T2: '🔧' }, note: 'both at once' })
+
+  // T2 is confirmed ten minutes in; T1 hears nothing more.
+  await clock.advance(10 * MINUTE)
+  await $.tool.call({ tool: 'mcp__taskrail__set', tasks: { T2: '🔧' } })
+  await clock.advance(6 * MINUTE)
+
+  // The band cannot write while it draws, but it already shows the zombie.
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: '├🧟 ' })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: '╰🔧 ' })).toBeDefined()
+  await band.unmount()
+
+  const shown = String((await $.tool.call({ tool: 'mcp__taskrail__show' })).result)
+  expect(shown).toContain('├🧟 T1 · 16m')
+  expect(shown).toContain('╰🔧 T2 · 16m')
+  expect(shown).toContain('│ both at once')
+
+  // The zombie is stored, and a set brings it back as any other move.
+  const revived = await $.tool.call({ tool: 'mcp__taskrail__set', tasks: { T1: '🩹' } })
+  expect(String(revived.result)).toContain('🔧 1 · 🩹 1')
 })

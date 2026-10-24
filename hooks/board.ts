@@ -56,6 +56,13 @@ const COLUMN = 10
 // shows nothing for less, where "0m" would only be noise.
 const MINUTE_MS = 60 * 1000
 
+// How long a task may sit in a running stage (🔧 👀 🩹 🧪) with no `set` and
+// no agent event touching it before it turns 🧟 on its own. A quarter of an
+// hour: longer than the build or test run a working agent waits on between
+// two tool calls, short enough to flag a task nobody is on before the wave
+// is held up for long.
+export const STALE_AFTER_MS = 15 * 60 * 1000
+
 /**
  * Terminal cells a string occupies.
  * @param text plain text, no ANSI codes
@@ -514,6 +521,42 @@ export function applyUpdates(plan: WaveBoardPlan, input: SetInput, now: number):
     unknown,
     rejected,
   }
+}
+
+/**
+ * The tasks gone stale: in a running stage (🔧 👀 🩹 🧪) and touched for
+ * the last time more than `limit` ago. A task waiting for the person (🔑)
+ * is not stale, it is waiting; one with no times (stored before they
+ * existed) has nothing to be old against.
+ * @param now epoch milliseconds of the check
+ * @param limit how old a touch may be, in milliseconds
+ * @returns the ids, wave by wave
+ */
+export function staleTasks(plan: WaveBoardPlan, now: number, limit: number): string[] {
+  return plan.waves
+    .flatMap(wave => wave.tasks)
+    .filter(([, icon, times]) => RUNNING.has(icon) && times !== undefined && now - times.touchedAt > limit)
+    .map(([id]) => id)
+}
+
+/**
+ * The plan with its stale tasks turned 🧟, the key line left as it was:
+ * the board flags them and the model says what happened when it next
+ * writes. The same plan comes back when nothing is stale, so the caller
+ * can tell there is nothing to write.
+ * @param now epoch milliseconds of the check
+ * @param limit how old a touch may be, in milliseconds
+ */
+export function markStale(plan: WaveBoardPlan, now: number, limit: number): { plan: WaveBoardPlan; stale: string[] } {
+  const stale = staleTasks(plan, now, limit)
+
+  if (stale.length === 0) {
+    return { plan, stale }
+  }
+
+  const zombies = Object.fromEntries(stale.map(id => [id, '🧟']))
+
+  return { plan: applyUpdates(plan, { tasks: zombies }, now).plan, stale }
 }
 
 /**

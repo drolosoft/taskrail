@@ -145,3 +145,27 @@ test('the events stamp the times a task moved: started on the spawn, touched aga
   // A task nobody named keeps no times.
   expect(timesOf(merged, 'T12')).toBeUndefined()
 })
+
+test('a linked agent\'s tool calls keep its task fresh, at most one write a minute', async () => {
+  const { plan, links } = onSpawn(PLAN, NONE, { agentId: 'ag-1', description: 'T1' }, NOON)
+
+  // Within the minute the touch is recent enough: nothing is written.
+  expect(onToolStart(plan, links, 'ag-1', NOON + 30 * 1000).changed).toBe(false)
+
+  const fresh = onToolStart(plan, links, 'ag-1', NOON + 14 * MINUTE)
+  expect(fresh.changed).toBe(true)
+  expect(iconOf(fresh.plan, 'T1')).toBe('🔧')
+  expect(timesOf(fresh.plan, 'T1')).toEqual({ touchedAt: NOON + 14 * MINUTE, startedAt: NOON, doneAt: null })
+
+  // A task that is not in a running stage is not the agent's to keep alive.
+  const merged = moved(plan, 'T1', '🟩')
+  expect(onToolStart(merged, links, 'ag-1', NOON + 14 * MINUTE).changed).toBe(false)
+})
+
+test('a stale task leaves 🧟 on the next event: 🔧 on a spawn, 👀 when its agent answers', async () => {
+  const { plan, links } = onSpawn(PLAN, NONE, { agentId: 'ag-1', description: 'T1' }, NOON)
+  const stale = moved(plan, 'T1', '🧟')
+
+  expect(iconOf(onComplete(stale, links, { agentId: 'ag-1', reason: 'answer' }, NOON).plan, 'T1')).toBe('👀')
+  expect(iconOf(onSpawn(stale, NONE, { agentId: 'ag-2', description: 'Retry T1' }, NOON).plan, 'T1')).toBe('🔧')
+})

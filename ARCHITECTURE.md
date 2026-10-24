@@ -73,6 +73,11 @@ loading.
   tells Claude what the current mode asks of the chat, so Claude never has
   to read a settings file.
 - `show` returns `renderText` at the default width, for the chat.
+- A task in a running state (🔧 👀 🩹 🧪) whose last touch is more than
+  `STALE_AFTER_MS` (fifteen minutes) old turns 🧟, its key line kept
+  (`staleTasks`, `markStale`). The once-a-minute timer, `set` and `show`
+  write it; the band, which may not write while it draws, draws the plan
+  with its stale tasks already marked.
 - The event rules (`hooks/auto.ts`) find a task by its id as a whole word
   in the spawn's description, then its name, longest id first (`T12`
   before `T1`, `rev` never inside `review`). A spawn makes the task 🔧
@@ -80,7 +85,9 @@ loading.
   permission or end still reaches the task. A permission holds the task at
   🔑 from a running state (🔧 👀 🩹 🧪) and keeps the icon it had; the
   agent's next tool call gives it back unless the model moved the task
-  meanwhile. The end of a turn moves 🔧 or 🔑 to 👀 on an answer, and
+  meanwhile; with nothing held, a call renews the task's touch, at most
+  once a minute, so a task does not go stale while its agent works. The
+  end of a turn moves 🔧, 🔑 or 🧟 to 👀 on an answer, and
   anything not 🟩 or 🚀 to 💥 on an error or a refusal, 🛑 on an
   interruption. The main loop's own events carry no agent id and change
   nothing.
@@ -98,7 +105,8 @@ loading.
   same way. The drawing takes the time as a parameter (`now`) and stays
   pure; a column is ten cells, or wider when a task's time needs it, and
   its station on the rail widens with it. A once-a-minute timer started at
-  `session.start` redraws the band so the minutes move between writes.
+  `session.start` checks for stale tasks and redraws the band so the
+  minutes move between writes.
 - The rules stretch to the band's width less two cells, never under 40.
   Rows may run longer than the rules; the band truncates them.
 - The board has no right border because rows carry different numbers of

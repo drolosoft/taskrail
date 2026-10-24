@@ -14,9 +14,11 @@ import type { Segment } from './board'
 import {
   DEFAULT_WIDTH,
   ICONS,
+  STALE_AFTER_MS,
   applyUpdates,
   headerLine,
   isMode,
+  markStale,
   MODES,
   modeHint,
   newPlan,
@@ -38,8 +40,9 @@ const links = atom({ plugin: 'taskrail', key: 'agents' } as const, {} as AgentLi
 // The store key of the mode, shared by every session on this machine.
 const MODE_KEY = 'mode'
 
-// How often the band is drawn again when nothing else moves it: once a
-// minute, the unit the time after each task in flight is counted in.
+// How often the timer looks for stale tasks and draws the band again when
+// nothing else moves it: once a minute, the unit the time after each task
+// in flight is counted in, and a fifteenth of the stale limit.
 const TICK_EVERY_MS = 60 * 1000
 
 // The last failure written to the transcript, so a hook that breaks on
@@ -113,11 +116,37 @@ async function applyAuto($: EngineInterface, outcome: AutoResult): Promise<void>
 }
 
 /**
- * What the timer does once a minute. Every write of the plan redraws the
- * band; between writes the minutes after a task in flight would stand
- * still, so the band is asked to draw again.
+ * Turns the plan's stale tasks into 🧟 and writes it, when there are any.
+ * @returns the plan as it stands after the check, null with no plan
  */
-function tick($: EngineInterface): void {
+async function settleStale($: EngineInterface): Promise<WaveBoardPlan | null> {
+  const current = await read($, plan)
+
+  if (current === null) {
+    return null
+  }
+
+  const { plan: marked, stale } = markStale(current, await $.clock.now(), STALE_AFTER_MS)
+
+  if (stale.length > 0) {
+    await savePlan($, marked)
+  }
+
+  return marked
+}
+
+/**
+ * What the timer does once a minute: writes the tasks gone stale, then asks
+ * the band to draw again. Every write of the plan redraws the band; between
+ * writes the minutes after a task in flight would stand still.
+ */
+async function tick($: EngineInterface): Promise<void> {
+  try {
+    await settleStale($)
+  } catch (err) {
+    noteFailure($, 'timer', err)
+  }
+
   $.ui.invalidate('ui.render')
 }
 
@@ -208,7 +237,7 @@ export const register: Register = on => {
     await $.tool.register({
       name: 'set',
       description:
-        'Updates the wave board of this session: task icons by id, the key line (note), goal, title or description. The mod already moves a task from the engine\'s events when its id is in the Agent call\'s description (🔧 spawn, 🔑 waiting for approval, 👀/💥/🛑 at the turn\'s end); call `set` for everything else (🩹 🧪 🟩 🚀, a merge, CI, the note), never by editing files. What you set stays until an event has something new to say. Its result says what the current mode asks of the chat.',
+        'Updates the wave board of this session: task icons by id, the key line (note), goal, title or description. The mod already moves a task from the engine\'s events when its id is in the Agent call\'s description (🔧 spawn, 🔑 waiting for approval, 👀/💥/🛑 at the turn\'s end); call `set` for everything else (🩹 🧪 🟩 🚀, a merge, CI, the note), never by editing files. What you set stays until an event has something new to say. A task in 🔧 👀 🩹 🧪 that nothing touches for 15 minutes turns 🧟 on its own; set it again to move it on. Its result says what the current mode asks of the chat.',
       inputSchema: SET_SCHEMA,
     })
     await $.tool.register({
@@ -223,7 +252,7 @@ export const register: Register = on => {
     // The timer runs until the module reloads, which runs this hook again;
     // /clear and /resume keep it, as they keep the module.
     $.clock.every(TICK_EVERY_MS, () => {
-      tick($)
+      void tick($)
     })
 
     return next(e)
@@ -286,7 +315,12 @@ export const register: Register = on => {
       return { deny: 'taskrail: no plan in this session yet; create one with mcp__taskrail__plan.' }
     }
 
-    const { plan: changed, unknown, rejected } = applyUpdates(current, e, await $.clock.now())
+    const now = await $.clock.now()
+    const { plan: updated, unknown, rejected } = applyUpdates(current, e, now)
+
+    // The tasks this call named were touched just now; any other one that
+    // went quiet for too long is flagged in the same write.
+    const { plan: changed } = markStale(updated, now, STALE_AFTER_MS)
     await savePlan($, changed)
 
     const warnings: string[] = []
@@ -308,7 +342,7 @@ export const register: Register = on => {
   })
 
   on('tool.call', { tool: 'mcp__taskrail__show' }, async $ => {
-    const current = await read($, plan)
+    const current = await settleStale($)
 
     if (current === null) {
       return { deny: 'taskrail: no plan in this session yet; create one with mcp__taskrail__plan.' }
@@ -404,8 +438,12 @@ export const register: Register = on => {
     let bar: string
     let lines: Segment[][]
     try {
-      bar = renderBar(current)
-      lines = renderFull(current, width, now)
+      // A render hook may not write, so the board is drawn with its stale
+      // tasks already marked and the timer stores them within the minute.
+      const drawn = markStale(current, now, STALE_AFTER_MS).plan
+
+      bar = renderBar(drawn)
+      lines = renderFull(drawn, width, now)
     } catch (err) {
       noteFailure($, 'ui.render', err)
 

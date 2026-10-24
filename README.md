@@ -66,8 +66,11 @@ Claude does not have to report everything. The mod listens to the engine's own a
 |---|---|
 | A subagent is spawned whose description or name carries a task id (`Implement T4`) | ties the agent to the task; a task nobody was on (🥚 🥱 👻 🧟) becomes 🔧 |
 | That agent asks you for a permission | the task becomes 🔑 while it waits |
-| The agent calls its next tool | the task takes back the icon it had |
-| The agent's turn ends | an answer hands a working task (🔧 🔑) to 👀; an error or a refusal makes it 💥; an interruption 🛑 |
+| The agent calls its next tool | the task takes back the icon it had; with nothing held, the call counts as news of the task |
+| The agent's turn ends | an answer hands a working task (🔧 🔑 🧟) to 👀; an error or a refusal makes it 💥; an interruption 🛑 |
+| Fifteen minutes go by with no `set` and no agent event touching a task in 🔧 👀 🩹 🧪 | the task becomes 🧟; the key line stays as it was. The next `set` or event moves it on as usual |
+
+The stale check runs once a minute, and also whenever the board is drawn. A task waiting for you (🔑) never goes stale.
 
 A task that is 🟩 or 🚀 is never touched, and `set` still has the last word: an icon Claude sets stays until an event with something new to say. Name the task id in each `Agent` call's description and the board follows it.
 
