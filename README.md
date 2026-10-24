@@ -52,6 +52,10 @@ The mod registers three tools. Claude calls them on its own when it runs a plan 
 
 Icons: 🥚 pending · 🔧 working · 👀 in review · 🩹 fixing · 🧪 testing · 🟩 merged · 🚀 shipped · 🔑 needs you · 👻 missing · 🧟 stale · 💥 broken · 🥱 idle · 🛑 stopped. The header counts each of these icons in use. A wave's station is 🟩 when every task is merged; otherwise it shows the most pressing state among its tasks, in this order: 🛑 🔑 💥 🧟 👻 🩹 👀 🧪 🔧 🚀, else 🥚. The "N of M" counts 🟩 only; the tiles are green for 🟩, yellow for the running states (🔧 👀 🩹 🧪, at least one tile while anything runs) and red for the rest. `plan` and `set` also take a `note`, the key line under the rail.
 
+### Running the waves fast
+
+The plugin ships a skill, `running-waves`, that Claude loads when it runs a plan with several tasks. It holds the rules that keep the waves fast, measured on real runs: subagents never wait on each other's processes, each worktree has its own port and test server, anything long runs in the background, only the tests of what changed run while iterating, a server is not rebuilt when nothing changed, briefs are short, and independent plans run at once. Several tasks in 🔧 at the same time is the board working as intended; one 🔧 at a time means the waves are being run in series.
+
 ### What moves on its own
 
 Claude does not have to report everything. The mod listens to the engine's own agent events and moves a task when they are clear enough:

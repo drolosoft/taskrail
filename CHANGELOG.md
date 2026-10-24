@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Skill `running-waves`: the rules that keep a multi-task plan fast (subagents never wait on each other's processes, own port and server per worktree, long commands in the background, only the tests of what changed while iterating, no rebuild without a change, short briefs, independent plans at once, measure before carrying on). Claude loads it when it runs a plan on the board.
+
 ## [v0.2.0] - 2026-10-19
 
 ### Added
