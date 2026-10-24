@@ -2,10 +2,14 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { applyUpdates, cells, newPlan, pad, renderBar, renderFull, renderText } from '../hooks/board'
+import { applyUpdates, cells, duration, newPlan, pad, renderBar, renderFull, renderText } from '../hooks/board'
+import type { WaveBoardPlan } from '../types'
 
 // A fixed instant, so the HH:MM in the header is the same on every run.
 const NOON = new Date(2026, 9, 4, 12, 30).getTime()
+
+// One minute, the unit of the times the board prints after a task.
+const MINUTE = 60 * 1000
 
 // What a person typing the command at the prompt looks like to the engine.
 const TYPED = { origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } } as const
@@ -368,4 +372,71 @@ test('set turns ✅ into 🟩 and keeps the old icon when the new one is not on 
   const text = renderText(plan, 40)
   expect(text).toContain('│ plan 7 · cleanup · 3 of 6 · 12:30 · 🟩 3 · 🥚 3')
   expect(text).toContain('│      ├🟩 T1    ├🥚 T4    ╰🥚 T6')
+})
+
+test('a duration is minutes under an hour and hours with two-digit minutes above', () => {
+  expect(duration(12 * MINUTE)).toBe('12m')
+  expect(duration(59 * MINUTE + 59 * 1000)).toBe('59m')
+  expect(duration(72 * MINUTE)).toBe('1h12m')
+  expect(duration(125 * MINUTE)).toBe('2h05m')
+})
+
+test('a task in flight shows how long it has run, a finished one how long it took, a pending one nothing', () => {
+  const started = applyUpdates(EXAMPLE, { tasks: { T1: '🔧', T4: '🔧' } }, NOON).plan
+  const finished = applyUpdates(started, { tasks: { T1: '🟩' } }, NOON + 48 * MINUTE).plan
+  const lines = renderText(finished, 40, NOON + 72 * MINUTE).split('\n')
+
+  // Each wave's column widens to fit its longest task with its time, and
+  // its station on the rail widens with it, so the tasks still hang under
+  // their own station.
+  expect(lines).toContain('│ main 🥚 A 1/3    ┄🔧 B 0/2      ┄🥚 C 0/1 ┄▶ 🚀 cleanup → main')
+  expect(lines).toContain('│      ├🟩 T1 · 48m ├🔧 T4 · 1h12m ╰🥚 T6')
+  expect(lines).toContain('│      ├🥚 T2       ╰🥚 T5')
+
+  // The header keeps the time of the last write, not the time of the draw.
+  expect(lines[1]).toBe('│ plan 7 · cleanup · 1 of 6 · 13:18 · 🟩 1 · 🔧 1 · 🥚 4')
+
+  // The time is plain text: only the id of a task in flight goes bold.
+  const segments = renderFull(finished, 40, NOON + 72 * MINUTE).flat()
+  expect(segments.find(segment => segment.text === ' · 1h12m')?.bold).not.toBe(true)
+})
+
+test('a task that moves within the minute it started shows no time', () => {
+  const { plan } = applyUpdates(EXAMPLE, { tasks: { T1: '🟩', T4: '🔧' } }, NOON)
+
+  expect(renderText(plan, 40, NOON + 30 * 1000)).toContain('│      ├🟩 T1    ├🔧 T4    ╰🥚 T6')
+})
+
+// A plan as versions before task times stored it: every task a bare id and
+// icon pair, two of them already under way.
+const UNTIMED: WaveBoardPlan = {
+  ...EXAMPLE,
+  waves: [
+    { name: 'A', tasks: [['T1', '🟩'], ['T2', '🥚'], ['T3', '🥚']] },
+    { name: 'B', tasks: [['T4', '🔧'], ['T5', '🥚']] },
+    { name: 'C', tasks: [['T6', '🥚']] },
+  ],
+}
+
+test('a plan saved before task times loads and draws with no time, and times the tasks that move after', async ($, on) => {
+  const clock = mock.clock(on, { now: NOON })
+  mock.store(on, { 'plan:test-session': UNTIMED })
+  on('session.id', () => ({ value: 'test-session' }))
+  on('classic.SessionStart', () => ({}))
+
+  await $.classic.SessionStart({ source: 'resume' })
+  await clock.advance(90 * MINUTE)
+
+  // Nobody knows when T4 started, so it shows no time rather than a wrong one.
+  const loaded = String((await $.tool.call({ tool: 'mcp__taskrail__show' })).result)
+  expect(loaded).toContain('│      ├🟩 T1    ├🔧 T4    ╰🥚 T6')
+
+  await $.tool.call({ tool: 'mcp__taskrail__set', tasks: { T4: '🟩', T5: '🔧' } })
+  await clock.advance(12 * MINUTE)
+
+  // T4 still has no start to count from; T5 started with this set, and its
+  // time widens wave B for both of its tasks.
+  const moved = String((await $.tool.call({ tool: 'mcp__taskrail__show' })).result)
+  expect(moved).toContain('│      ├🟩 T1    ├🟩 T4       ╰🥚 T6')
+  expect(moved).toContain('│      ├🥚 T2    ╰🔧 T5 · 12m')
 })

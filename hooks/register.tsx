@@ -12,6 +12,7 @@ import { onComplete, onPermission, onSpawn, onToolStart } from './auto'
 import type { AutoResult } from './auto'
 import type { Segment } from './board'
 import {
+  DEFAULT_WIDTH,
   ICONS,
   applyUpdates,
   headerLine,
@@ -36,6 +37,10 @@ const links = atom({ plugin: 'taskrail', key: 'agents' } as const, {} as AgentLi
 
 // The store key of the mode, shared by every session on this machine.
 const MODE_KEY = 'mode'
+
+// How often the band is drawn again when nothing else moves it: once a
+// minute, the unit the time after each task in flight is counted in.
+const TICK_EVERY_MS = 60 * 1000
 
 // The last failure written to the transcript, so a hook that breaks on
 // every event (a render, say) says so once and not on every redraw.
@@ -105,6 +110,15 @@ async function applyAuto($: EngineInterface, outcome: AutoResult): Promise<void>
 
   await update($, links, () => outcome.links)
   await savePlan($, outcome.plan)
+}
+
+/**
+ * What the timer does once a minute. Every write of the plan redraws the
+ * band; between writes the minutes after a task in flight would stand
+ * still, so the band is asked to draw again.
+ */
+function tick($: EngineInterface): void {
+  $.ui.invalidate('ui.render')
 }
 
 /** Loads the mode the user last chose, kept in the store across sessions. */
@@ -206,6 +220,12 @@ export const register: Register = on => {
     await loadMode($)
     await loadPlan($)
 
+    // The timer runs until the module reloads, which runs this hook again;
+    // /clear and /resume keep it, as they keep the module.
+    $.clock.every(TICK_EVERY_MS, () => {
+      tick($)
+    })
+
     return next(e)
   })
 
@@ -294,7 +314,7 @@ export const register: Register = on => {
       return { deny: 'taskrail: no plan in this session yet; create one with mcp__taskrail__plan.' }
     }
 
-    return { result: renderText(current) }
+    return { result: renderText(current, DEFAULT_WIDTH, await $.clock.now()) }
   })
 
   // The engine's agent events, each one a rule of hooks/auto.ts over the
@@ -376,6 +396,7 @@ export const register: Register = on => {
     // The rules stretch to the band's width, as the status line script
     // stretched them to the terminal's; two cells short so nothing wraps.
     const width = Math.max(40, e.props.bodyColumns - 2)
+    const now = await $.clock.now()
 
     // The drawing is computed before anything beneath is asked: a plan the
     // renderer cannot draw (one an older version stored, say) must leave
@@ -384,7 +405,7 @@ export const register: Register = on => {
     let lines: Segment[][]
     try {
       bar = renderBar(current)
-      lines = renderFull(current, width)
+      lines = renderFull(current, width, now)
     } catch (err) {
       noteFailure($, 'ui.render', err)
 

@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import { iconOf, onComplete, onPermission, onSpawn, onToolStart, taskOf } from '../hooks/auto'
 import { applyUpdates, newPlan } from '../hooks/board'
-import type { AgentLinks, WaveBoardPlan } from '../types'
+import type { AgentLinks, TaskTimes, WaveBoardPlan } from '../types'
 
 // A fixed instant; the rules stamp it as the plan's last write.
 const NOON = new Date(2026, 9, 17, 12, 30).getTime()
@@ -21,8 +21,18 @@ const PLAN = newPlan(
   NOON,
 )
 
+// One minute, for the times the rules stamp on a task.
+const MINUTE = 60 * 1000
+
 // No agent linked yet.
 const NONE: AgentLinks = {}
+
+/** The times a plan keeps for one task, or undefined when it keeps none. */
+function timesOf(plan: WaveBoardPlan, id: string): TaskTimes | undefined {
+  const task = plan.waves.flatMap(wave => wave.tasks).find(candidate => candidate[0] === id)
+
+  return task?.[2]
+}
 
 /** The plan with one task moved by hand, as the model's `set` would. */
 function moved(plan: WaveBoardPlan, id: string, icon: string): WaveBoardPlan {
@@ -119,4 +129,19 @@ test('the end of a turn hands work to review, breaks it or stops it, and never t
 
   // An agent nobody linked says nothing about the plan.
   expect(onComplete(plan, NONE, { agentId: 'ag-1', reason: 'answer' }, NOON).changed).toBe(false)
+})
+
+test('the events stamp the times a task moved: started on the spawn, touched again at the end', async () => {
+  const spawned = onSpawn(PLAN, NONE, { agentId: 'ag-1', description: 'Implement T1' }, NOON)
+  expect(timesOf(spawned.plan, 'T1')).toEqual({ touchedAt: NOON, startedAt: NOON, doneAt: null })
+
+  const answered = onComplete(spawned.plan, spawned.links, { agentId: 'ag-1', reason: 'answer' }, NOON + 20 * MINUTE)
+  expect(timesOf(answered.plan, 'T1')).toEqual({ touchedAt: NOON + 20 * MINUTE, startedAt: NOON, doneAt: null })
+
+  // Merged by the model later: the total runs from the spawn to the merge.
+  const merged = applyUpdates(answered.plan, { tasks: { T1: '🟩' } }, NOON + 48 * MINUTE).plan
+  expect(timesOf(merged, 'T1')).toEqual({ touchedAt: NOON + 48 * MINUTE, startedAt: NOON, doneAt: NOON + 48 * MINUTE })
+
+  // A task nobody named keeps no times.
+  expect(timesOf(merged, 'T12')).toBeUndefined()
 })

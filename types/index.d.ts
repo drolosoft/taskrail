@@ -6,10 +6,20 @@
 export type WaveBoardMode = 'off' | 'bar' | 'full' | 'both'
 
 /**
- * One task of the plan: its id as it appears in the map and its state icon.
- * A tuple: compact in the store and cheap to compare.
+ * When a task moved, in epoch milliseconds. `touchedAt` is the last time
+ * `set` or an agent event wrote its icon (the same icon included);
+ * `startedAt` the moment it first left 🥚, and `doneAt` the moment it
+ * reached 🟩 or 🚀, null while it has not.
  */
-export type WaveBoardTask = [id: string, icon: string]
+export type TaskTimes = { touchedAt: number; startedAt: number | null; doneAt: number | null }
+
+/**
+ * One task of the plan: its id as it appears in the map, its state icon
+ * and, once its icon was first written, its times. A tuple: compact in the
+ * store and cheap to compare. Plans stored before the times existed carry
+ * the first two alone.
+ */
+export type WaveBoardTask = [id: string, icon: string, times?: TaskTimes]
 
 /** One wave: the tasks that run in parallel under one station of the rail. */
 export type WaveBoardWave = { name: string; tasks: WaveBoardTask[] }

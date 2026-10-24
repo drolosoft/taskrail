@@ -1,7 +1,7 @@
 // The board itself: pure functions from a plan to the lines the band draws,
 // kept free of `$` so the hooks module can import it and `claude plugin
 // validate` still sees every call.
-import type { PlanInput, SetInput, WaveBoardMode, WaveBoardPlan, WaveBoardTask, WaveBoardWave } from '../types'
+import type { PlanInput, SetInput, TaskTimes, WaveBoardMode, WaveBoardPlan, WaveBoardTask, WaveBoardWave } from '../types'
 
 /** A run of text in a row, bold when the task is in flight. */
 export type Segment = { text: string; bold?: boolean }
@@ -27,6 +27,9 @@ const URGENCY = ['🛑', '🔑', '💥', '🧟', '👻', '🩹', '👀', '🧪',
 // The stages that count as "running" for the yellow tiles of the bar.
 const RUNNING = new Set(['🔧', '👀', '🩹', '🧪'])
 
+// Work that is over: a task's clock stops when it reaches one of these.
+const DONE = new Set(['🟩', '🚀'])
+
 // Icons a model writes for "done" out of habit. They mean 🟩 here: the
 // board only counts the square, so a ✅ left as it was would read as a task
 // that never finished.
@@ -44,6 +47,14 @@ export function normalizeIcon(icon: string): string | null {
 
 // Width of the rules when the band cannot tell its own width.
 export const DEFAULT_WIDTH = 66
+
+// Cells of a task column and of its station on the rail, unless a task's
+// time needs more.
+const COLUMN = 10
+
+// One minute in milliseconds: the board counts a task's time in minutes and
+// shows nothing for less, where "0m" would only be noise.
+const MINUTE_MS = 60 * 1000
 
 /**
  * Terminal cells a string occupies.
@@ -106,6 +117,73 @@ export function clock(ms: number): string {
 }
 
 /**
+ * A span of time as the board prints it after a task: whole minutes under
+ * an hour (`12m`), hours and two-digit minutes above (`1h12m`, `2h05m`).
+ * @param ms the span in milliseconds
+ */
+export function duration(ms: number): string {
+  const minutes = Math.floor(ms / MINUTE_MS)
+
+  if (minutes < 60) {
+    return `${minutes}m`
+  }
+
+  const hours = Math.floor(minutes / 60)
+  const rest = String(minutes % 60).padStart(2, '0')
+
+  return `${hours}h${rest}m`
+}
+
+/**
+ * What the board prints after a task: how long it has run while it is
+ * under way, how long it took once it is done.
+ * @param task the task with its times, if it has any
+ * @param now epoch milliseconds of the drawing
+ * @returns the time as ` · 12m`, or null when there is nothing to tell: a
+ *   pending task, a task nobody saw start (a plan stored before the times
+ *   existed), or less than a minute
+ */
+export function taskTime(task: WaveBoardTask, now: number): string | null {
+  const [, icon, times] = task
+
+  if (icon === '🥚' || times === undefined || times.startedAt === null) {
+    return null
+  }
+
+  const end = times.doneAt ?? now
+  const spent = end - times.startedAt
+
+  if (spent < MINUTE_MS) {
+    return null
+  }
+
+  return ` · ${duration(spent)}`
+}
+
+/**
+ * The times of a task whose icon is being written: touched now, started
+ * when it first leaves 🥚, done when it reaches 🟩 or 🚀. A task that leaves
+ * done work again (reopened for a fix) runs again from its first start.
+ * @param task the task before the write
+ * @param icon the icon being written, already normalized
+ * @param now epoch milliseconds of the write
+ */
+export function stamp(task: WaveBoardTask, icon: string, now: number): TaskTimes {
+  const [, before, times] = task
+
+  // A task that was already under way when the plan was stored without
+  // times has no known start: it stays unknown rather than starting now,
+  // which would print a time too short.
+  const isStarting = before === '🥚' && icon !== '🥚'
+  const startedAt = times?.startedAt ?? (isStarting ? now : null)
+
+  // Moving between 🟩 and 🚀 keeps the first finish.
+  const doneAt = DONE.has(icon) ? (times?.doneAt ?? now) : null
+
+  return { touchedAt: now, startedAt, doneAt }
+}
+
+/**
  * Colour tiles at scale: one tile per `100 / scale` percent of the plan,
  * green merged, yellow running, red pending or blocked. Never one tile per
  * task.
@@ -149,21 +227,49 @@ export function headerLine(plan: WaveBoardPlan): string {
 }
 
 /**
- * The rail: ` main ` then one ten-cell station per wave and the goal. The
- * rail glyph is `━` up to the last all-green station and `┄` after it.
+ * The cells each wave's column takes: ten, or as many as its longest task
+ * with its time and one space after it. A plan with no times draws exactly
+ * as it did before they existed.
+ * @param now epoch milliseconds of the drawing
  */
-export function rail(plan: WaveBoardPlan): string {
+export function columnWidths(plan: WaveBoardPlan, now: number): number[] {
+  return plan.waves.map(wave => {
+    const widths = wave.tasks.map(task => {
+      const time = taskTime(task, now)
+
+      if (time === null) {
+        return COLUMN
+      }
+
+      // The glyph, the icon and its space, the id, the time and a gap.
+      return 1 + cells(`${task[1]} `) + cells(task[0]) + cells(time) + 1
+    })
+
+    return Math.max(COLUMN, ...widths)
+  })
+}
+
+/**
+ * The rail: ` main ` then one station per wave, as wide as the wave's
+ * column, and the goal. The rail glyph is `━` up to the last all-green
+ * station and `┄` after it.
+ * @param now epoch milliseconds of the drawing, which sets the columns
+ */
+export function rail(plan: WaveBoardPlan, now: number): string {
   const greens = plan.waves
     .map((wave, index) => (aggregate(waveIcons(wave)) === '🟩' ? index : -1))
     .filter(index => index >= 0)
   const lastGreen = greens.length > 0 ? Math.max(...greens) : -1
+  const widths = columnWidths(plan, now)
   let line = ' main '
 
   plan.waves.forEach((wave, index) => {
     const icons = waveIcons(wave)
     const glyph = index <= lastGreen ? '━' : '┄'
     const merged = icons.filter(icon => icon === '🟩').length
-    line += pad(`${aggregate(icons)} ${wave.name} ${merged}/${icons.length} `, 9) + glyph
+    // The station and its glyph fill the column the wave's tasks hang in.
+    const width = (widths[index] ?? COLUMN) - 1
+    line += pad(`${aggregate(icons)} ${wave.name} ${merged}/${icons.length} `, width) + glyph
   })
 
   return line + `▶ 🚀 ${plan.goal}`
@@ -171,12 +277,15 @@ export function rail(plan: WaveBoardPlan): string {
 
 /**
  * The task rows under the rail: each wave hangs its tasks under its
- * station, `├` on every row but the last, `╰` on the last, ten cells per
- * column. Empty slots stay blank: a little drift reads better than filler
- * squares. Ids of tasks in flight go bold.
+ * station, `├` on every row but the last, `╰` on the last, in a column as
+ * wide as the station. Empty slots stay blank: a little drift reads better
+ * than filler squares. Ids of tasks in flight go bold; after the id, the
+ * task's time when it has one.
+ * @param now epoch milliseconds of the drawing
  */
-export function taskRows(plan: WaveBoardPlan): Segment[][] {
+export function taskRows(plan: WaveBoardPlan, now: number): Segment[][] {
   const depth = Math.max(0, ...plan.waves.map(wave => wave.tasks.length))
+  const widths = columnWidths(plan, now)
   const rows: Segment[][] = []
 
   for (let row = 0; row < depth; row += 1) {
@@ -184,21 +293,28 @@ export function taskRows(plan: WaveBoardPlan): Segment[][] {
     const last = Math.max(...filled)
     const segments: Segment[] = [{ text: '      ' }]
 
-    plan.waves.slice(0, last + 1).forEach(wave => {
+    plan.waves.slice(0, last + 1).forEach((wave, index) => {
       const task = wave.tasks[row]
+      const width = widths[index] ?? COLUMN
 
       if (task === undefined) {
-        segments.push({ text: pad('') })
+        segments.push({ text: pad('', width) })
         return
       }
 
       const glyph = row === wave.tasks.length - 1 ? '╰' : '├'
       const [id, icon] = task
       const head = `${glyph}${icon} `
-      const tail = ' '.repeat(Math.max(0, 10 - cells(head) - cells(id)))
+      const time = taskTime(task, now) ?? ''
+      const tail = ' '.repeat(Math.max(0, width - cells(head) - cells(id) - cells(time)))
 
       segments.push({ text: head })
       segments.push({ text: id, bold: icon !== '🟩' && icon !== '🥚' })
+
+      if (time !== '') {
+        segments.push({ text: time })
+      }
+
       segments.push({ text: tail })
     })
 
@@ -264,8 +380,10 @@ export function wrapText(text: string, width: number): string[] {
  * thirty-tile bar. No right border, because rows carry different emoji
  * counts and a right edge would zigzag.
  * @param width cells of the rules; the band's `bodyColumns` less two
+ * @param now epoch milliseconds of the drawing, for the time of each task
+ *   still under way; the plan's last write when not given
  */
-export function renderFull(plan: WaveBoardPlan, width = DEFAULT_WIDTH): Segment[][] {
+export function renderFull(plan: WaveBoardPlan, width = DEFAULT_WIDTH, now = plan.updatedAt): Segment[][] {
   const { done, running, total } = progress(plan)
   const rule = '─'.repeat(width)
   const lines: Segment[][] = []
@@ -287,8 +405,8 @@ export function renderFull(plan: WaveBoardPlan, width = DEFAULT_WIDTH): Segment[
   }
 
   lines.push([{ text: `├${rule}` }])
-  lines.push([{ text: `│${rail(plan)}` }])
-  taskRows(plan).forEach(row => lines.push([{ text: '│' }, ...row]))
+  lines.push([{ text: `│${rail(plan, now)}` }])
+  taskRows(plan, now).forEach(row => lines.push([{ text: '│' }, ...row]))
   lines.push([{ text: `├${rule}` }])
   lines.push([{ text: `│ ${plan.note}` }])
   lines.push([{ text: `│ ${tiles(done, running, total, 30)} ${done}/${total}` }])
@@ -314,9 +432,14 @@ export function renderBar(plan: WaveBoardPlan): string {
   return ` ${plan.project} · ${plan.title} · ${clock(plan.updatedAt)} · ${stations} ▶ 🚀 ${plan.goal} · ${tiles(done, running, total, 10)} ${done}/${total}`
 }
 
-/** The whole board as plain text, for the chat when the mode asks for it. */
-export function renderText(plan: WaveBoardPlan, width = DEFAULT_WIDTH): string {
-  return renderFull(plan, width)
+/**
+ * The whole board as plain text, for the chat when the mode asks for it.
+ * @param width cells of the rules
+ * @param now epoch milliseconds of the drawing; the plan's last write when
+ *   not given
+ */
+export function renderText(plan: WaveBoardPlan, width = DEFAULT_WIDTH, now = plan.updatedAt): string {
+  return renderFull(plan, width, now)
     .map(row => row.map(segment => segment.text).join(''))
     .join('\n')
 }
@@ -343,7 +466,8 @@ export function newPlan(input: PlanInput, now: number): WaveBoardPlan {
 }
 
 /**
- * The plan after the updates: a new object, the old one untouched.
+ * The plan after the updates: a new object, the old one untouched. Every
+ * task the input writes an icon to is stamped with `now` (see `stamp`).
  * @returns the plan, the task ids the input named but the plan lacks, and
  *   the tasks whose new icon the board refused (they keep their old icon)
  */
@@ -356,8 +480,9 @@ export function applyUpdates(plan: WaveBoardPlan, input: SetInput, now: number):
     tasks: wave.tasks.map((task): WaveBoardTask => {
       const sent = tasks[task[0]]
 
+      // A task the input does not name keeps its icon and its times.
       if (sent === undefined) {
-        return [task[0], task[1]]
+        return task
       }
 
       seen.add(task[0])
@@ -368,10 +493,10 @@ export function applyUpdates(plan: WaveBoardPlan, input: SetInput, now: number):
 
       if (icon === null) {
         rejected.push([task[0], sent])
-        return [task[0], task[1]]
+        return task
       }
 
-      return [task[0], icon]
+      return [task[0], icon, stamp(task, icon, now)]
     }),
   }))
   const unknown = Object.keys(tasks).filter(id => !seen.has(id))

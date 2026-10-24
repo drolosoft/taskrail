@@ -93,6 +93,12 @@ loading.
   the first icon of `URGENCY` found among its tasks, or 🟩 when every task
   is merged, or 🥚; the tiles are green for 🟩, yellow for the `RUNNING`
   icons (at least one tile while anything runs) and red for the rest.
+- Each task carries its times (`TaskTimes`: last write, first start, done),
+  stamped by `applyUpdates`, so `set` and the event rules record them the
+  same way. The drawing takes the time as a parameter (`now`) and stays
+  pure; a column is ten cells, or wider when a task's time needs it, and
+  its station on the rail widens with it. A once-a-minute timer started at
+  `session.start` redraws the band so the minutes move between writes.
 - The rules stretch to the band's width less two cells, never under 40.
   Rows may run longer than the rules; the band truncates them.
 - The board has no right border because rows carry different numbers of
