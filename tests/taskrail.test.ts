@@ -353,3 +353,19 @@ test('with nothing drawn beneath the board is alone, and a survey takes the band
   expect(await surveyed.drawn()).toEqual({ type: 'engine', ref: 0 })
   await surveyed.unmount()
 })
+
+test('set turns ✅ into 🟩 and keeps the old icon when the new one is not on the board', () => {
+  const { plan, rejected } = applyUpdates(
+    EXAMPLE,
+    { tasks: { T1: '✅', T2: '✔️', T3: '☑️', T4: '⚡' } },
+    NOON,
+  )
+
+  // The three aliases of "done" count as merged, the unknown icon is
+  // refused and named so the model can correct itself.
+  expect(rejected).toEqual([['T4', '⚡']])
+
+  const text = renderText(plan, 40)
+  expect(text).toContain('│ plan 7 · cleanup · 3 of 6 · 12:30 · 🟩 3 · 🥚 3')
+  expect(text).toContain('│      ├🟩 T1    ├🥚 T4    ╰🥚 T6')
+})

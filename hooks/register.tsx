@@ -12,6 +12,7 @@ import { onComplete, onPermission, onSpawn, onToolStart } from './auto'
 import type { AutoResult } from './auto'
 import type { Segment } from './board'
 import {
+  ICONS,
   applyUpdates,
   headerLine,
   isMode,
@@ -146,7 +147,7 @@ const SET_SCHEMA = {
   properties: {
     tasks: {
       type: 'object',
-      description: 'Task id to new icon: {"T4": "🟩", "T5": "👀"}. Icons: 🥚 🔧 👀 🩹 🧪 🟩 🚀 🔑 👻 🧟 💥 🥱 🛑.',
+      description: 'Task id to new icon: {"T4": "🟩", "T5": "👀"}. Icons: 🥚 🔧 👀 🩹 🧪 🟩 🚀 🔑 👻 🧟 💥 🥱 🛑. ✅ is read as 🟩; any other icon is refused and the task keeps its own.',
       additionalProperties: { type: 'string' },
     },
     note: { type: 'string', description: 'Replaces the key line.' },
@@ -265,10 +266,23 @@ export const register: Register = on => {
       return { deny: 'taskrail: no plan in this session yet; create one with mcp__taskrail__plan.' }
     }
 
-    const { plan: changed, unknown } = applyUpdates(current, e, await $.clock.now())
+    const { plan: changed, unknown, rejected } = applyUpdates(current, e, await $.clock.now())
     await savePlan($, changed)
 
-    const warning = unknown.length > 0 ? `\nunknown task ids, ignored: ${unknown.join(', ')}` : ''
+    const warnings: string[] = []
+
+    if (unknown.length > 0) {
+      warnings.push(`unknown task ids, ignored: ${unknown.join(', ')}`)
+    }
+
+    // A refused icon is named with the valid list, so the next call fixes it
+    // instead of leaving a task that never counts as done.
+    if (rejected.length > 0) {
+      const pairs = rejected.map(([id, icon]) => `${id} ${icon}`).join(', ')
+      warnings.push(`unknown icons, tasks kept as they were: ${pairs}. Valid icons: ${ICONS}`)
+    }
+
+    const warning = warnings.map(line => `\n${line}`).join('')
 
     return { result: `${headerLine(changed)}${warning}\n${modeHint(await read($, mode))}` }
   })

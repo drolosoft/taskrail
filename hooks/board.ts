@@ -17,12 +17,30 @@ const EMOJI = new Set([...'🥚🔧👀🩹🧪🟩🚀🔑👻🧟💥🥱🛑�
 // may set, finished work first and pending last.
 const ORDER = ['🟩', '🔧', '👀', '🩹', '🧪', '🚀', '🔑', '💥', '🛑', '👻', '🧟', '🥱', '🥚']
 
+// The same list as text, for the message that names a refused icon.
+export const ICONS = ORDER.join(' ')
+
 // A wave's station shows its most urgent state: a stop first, then the
 // events, the running stages and a shipped task, in this order.
 const URGENCY = ['🛑', '🔑', '💥', '🧟', '👻', '🩹', '👀', '🧪', '🔧', '🚀']
 
 // The stages that count as "running" for the yellow tiles of the bar.
 const RUNNING = new Set(['🔧', '👀', '🩹', '🧪'])
+
+// Icons a model writes for "done" out of habit. They mean 🟩 here: the
+// board only counts the square, so a ✅ left as it was would read as a task
+// that never finished.
+const ALIASES: Record<string, string> = { '✅': '🟩', '✔️': '🟩', '✔': '🟩', '☑️': '🟩', '☑': '🟩' }
+
+/**
+ * The icon the board will store for one the model sent, or null when the
+ * board does not know it and must refuse it.
+ */
+export function normalizeIcon(icon: string): string | null {
+  const known = ALIASES[icon] ?? icon
+
+  return ORDER.includes(known) ? known : null
+}
 
 // Width of the rules when the band cannot tell its own width.
 export const DEFAULT_WIDTH = 66
@@ -326,21 +344,33 @@ export function newPlan(input: PlanInput, now: number): WaveBoardPlan {
 
 /**
  * The plan after the updates: a new object, the old one untouched.
- * @returns the plan and the task ids the input named but the plan lacks
+ * @returns the plan, the task ids the input named but the plan lacks, and
+ *   the tasks whose new icon the board refused (they keep their old icon)
  */
-export function applyUpdates(plan: WaveBoardPlan, input: SetInput, now: number): { plan: WaveBoardPlan; unknown: string[] } {
+export function applyUpdates(plan: WaveBoardPlan, input: SetInput, now: number): { plan: WaveBoardPlan; unknown: string[]; rejected: Array<[string, string]> } {
   const tasks = input.tasks ?? {}
   const seen = new Set<string>()
+  const rejected: Array<[string, string]> = []
   const waves = plan.waves.map(wave => ({
     name: wave.name,
     tasks: wave.tasks.map((task): WaveBoardTask => {
-      const icon = tasks[task[0]]
+      const sent = tasks[task[0]]
 
-      if (icon === undefined) {
+      if (sent === undefined) {
         return [task[0], task[1]]
       }
 
       seen.add(task[0])
+
+      // An icon the board cannot count is worse than no update: the task
+      // keeps what it had and the caller is told, so the model corrects it.
+      const icon = normalizeIcon(sent)
+
+      if (icon === null) {
+        rejected.push([task[0], sent])
+        return [task[0], task[1]]
+      }
+
       return [task[0], icon]
     }),
   }))
@@ -357,6 +387,7 @@ export function applyUpdates(plan: WaveBoardPlan, input: SetInput, now: number):
       updatedAt: now,
     },
     unknown,
+    rejected,
   }
 }
 
