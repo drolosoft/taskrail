@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.3.0] - 2026-10-24
+
+### Added
+- The board times each task: how long it has been running while it runs, and how long it took once it is 🟩 or 🚀 (`🔧 T4 · 12m`). Plans saved before this version draw without times.
+- A task nothing touches for fifteen minutes (no `set`, no tool call from its subagent) turns 🧟 on its own; a `set` or an agent event takes it out again. A task waiting on a permission never goes stale.
+- `set` says in its result when a wave is being run one task at a time: two or more tasks still 🥚 and at most one running, in a wave that has started. The board itself does not change.
+
 ## [v0.2.1] - 2026-10-24
 
 ### Added
