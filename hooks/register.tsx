@@ -43,7 +43,9 @@ const MODE_KEY = 'mode'
 
 // How often the timer looks for stale tasks and draws the band again when
 // nothing else moves it: once a minute, the unit the time after each task
-// in flight is counted in, and a fifteenth of the stale limit.
+// in flight is counted in, and a fifteenth of the stale limit. The same
+// redraw is what takes a settled 🟩 task out of the rows (board.ts,
+// HIDE_DONE_AFTER_MS) when no write happens to do it.
 const TICK_EVERY_MS = 60 * 1000
 
 // The last failure written to the transcript, so a hook that breaks on

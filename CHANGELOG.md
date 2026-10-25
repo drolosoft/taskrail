@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- A task that has been 🟩 for five minutes leaves the rows of the board and the rows close up, so a long plan does not grow the band by one row per finished task. The header, the stations, the "N of M" and the tiles still count it; a 🚀 task and a 🟩 task from a plan saved before task times stay in sight.
+
 ## [v0.3.0] - 2026-10-24
 
 ### Added

@@ -396,18 +396,19 @@ test('a duration is minutes under an hour and hours with two-digit minutes above
 
 test('a task in flight shows how long it has run, a finished one how long it took, a pending one nothing', () => {
   const started = applyUpdates(EXAMPLE, { tasks: { T1: '🔧', T4: '🔧' } }, NOON).plan
-  const finished = applyUpdates(started, { tasks: { T1: '🟩' } }, NOON + 48 * MINUTE).plan
+  // T1 finishes two minutes before the draw, so it is still in the rows.
+  const finished = applyUpdates(started, { tasks: { T1: '🟩' } }, NOON + 70 * MINUTE).plan
   const lines = renderText(finished, 40, NOON + 72 * MINUTE).split('\n')
 
   // Each wave's column widens to fit its longest task with its time, and
   // its station on the rail widens with it, so the tasks still hang under
   // their own station.
-  expect(lines).toContain('│ main 🥚 A 1/3    ┄🔧 B 0/2      ┄🥚 C 0/1 ┄▶ 🚀 cleanup → main')
-  expect(lines).toContain('│      ├🟩 T1 · 48m ├🔧 T4 · 1h12m ╰🥚 T6')
-  expect(lines).toContain('│      ├🥚 T2       ╰🥚 T5')
+  expect(lines).toContain('│ main 🥚 A 1/3      ┄🔧 B 0/2      ┄🥚 C 0/1 ┄▶ 🚀 cleanup → main')
+  expect(lines).toContain('│      ├🟩 T1 · 1h10m ├🔧 T4 · 1h12m ╰🥚 T6')
+  expect(lines).toContain('│      ├🥚 T2         ╰🥚 T5')
 
   // The header keeps the time of the last write, not the time of the draw.
-  expect(lines[1]).toBe('│ plan 7 · cleanup · 1 of 6 · 13:18 · 🟩 1 · 🔧 1 · 🥚 4')
+  expect(lines[1]).toBe('│ plan 7 · cleanup · 1 of 6 · 13:40 · 🟩 1 · 🔧 1 · 🥚 4')
 
   // The time is plain text: only the id of a task in flight goes bold.
   const segments = renderFull(finished, 40, NOON + 72 * MINUTE).flat()
@@ -431,6 +432,72 @@ const UNTIMED: WaveBoardPlan = {
   ],
 }
 
+test('a task done for more than five minutes leaves the rows; the header, the stations and the bar still count it', () => {
+  const started = applyUpdates(EXAMPLE, { tasks: { T1: '🔧', T2: '🔧', T4: '🔧' } }, NOON).plan
+  const finished = applyUpdates(started, { tasks: { T1: '🟩', T4: '🟩' } }, NOON + 10 * MINUTE).plan
+
+  // Four minutes after finishing, both still hang under their stations.
+  const fresh = renderText(finished, 40, NOON + 14 * MINUTE).split('\n')
+  expect(fresh).toContain('│      ├🟩 T1 · 10m ├🟩 T4 · 10m ╰🥚 T6')
+
+  // Six minutes after, the rows close up without them: T2 and T3 under A,
+  // T5 alone under B with the last-row glyph, and A's column shrinks to
+  // its longest task left.
+  const later = renderText(finished, 40, NOON + 16 * MINUTE).split('\n')
+  expect(later).toContain('│      ├🔧 T2 · 16m ╰🥚 T5    ╰🥚 T6')
+  expect(later).toContain('│      ╰🥚 T3')
+  expect(later.join('\n')).not.toContain('T1')
+  expect(later.join('\n')).not.toContain('T4')
+
+  // What counts does not change: the header, the stations and the bar.
+  expect(later[1]).toBe('│ plan 7 · cleanup · 2 of 6 · 12:40 · 🟩 2 · 🔧 1 · 🥚 3')
+  expect(later).toContain('│ main 🔧 A 1/3    ┄🥚 B 1/2 ┄🥚 C 0/1 ┄▶ 🚀 cleanup → main')
+  expect(later[later.length - 2]).toContain(' 2/6')
+  expect(renderBar(finished)).toContain('A 🔧 1/3 ┄ B 🥚 1/2 ┄ C 🥚 0/1')
+
+  // Older than five minutes, not as old as them.
+  expect(renderText(finished, 40, NOON + 15 * MINUTE)).toContain('├🟩 T1 · 10m')
+})
+
+test('a plan with every task done and settled keeps its header and stations over no rows', () => {
+  const small = newPlan({ project: 'hopto', title: 'plan 8', goal: 'v1', waves: [{ name: 'A', tasks: ['T1'] }] }, NOON)
+  const done = applyUpdates(small, { tasks: { T1: '🟩' } }, NOON).plan
+  const lines = renderText(done, 40, NOON + 6 * MINUTE).split('\n')
+
+  expect(lines[1]).toBe('│ plan 8 · 1 of 1 · 12:30 · 🟩 1')
+  expect(lines).toContain('│ main 🟩 A 1/1 ━▶ 🚀 v1')
+  expect(lines.some(line => line.includes('T1'))).toBe(false)
+
+  // The rail is followed straight by the rule above the note.
+  const railIndex = lines.findIndex(line => line.startsWith('│ main'))
+  expect(lines[railIndex + 1]).toBe(`├${'─'.repeat(40)}`)
+})
+
+test('a 🚀 task and a 🟩 task with no times stay in the rows however old', () => {
+  const started = applyUpdates(EXAMPLE, { tasks: { T1: '🔧' } }, NOON).plan
+  const shipped = applyUpdates(started, { tasks: { T1: '🚀' } }, NOON + 60 * MINUTE).plan
+
+  expect(renderText(shipped, 40, NOON + 120 * MINUTE)).toContain('├🚀 T1 · 1h00m')
+  expect(renderText(UNTIMED, 40, NOON + 60 * MINUTE)).toContain('├🟩 T1    ├🔧 T4    ╰🥚 T6')
+})
+
+test('the band stops drawing a task five minutes after it is done, and keeps the count', async ($, on) => {
+  const clock = mock.clock(on, { now: NOON })
+  mock.store(on)
+  on('session.id', () => ({ value: 'test-session' }))
+  on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'engine', ref: 0 }))
+
+  await $.tool.call({ tool: 'mcp__taskrail__plan', project: 'hopto', title: 'plan 9', goal: 'v2', waves: [{ name: 'A', tasks: ['T1', 'T2'] }] })
+  await $.tool.call({ tool: 'mcp__taskrail__set', tasks: { T1: '🟩', T2: '🔧' } })
+  await clock.advance(6 * MINUTE)
+
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: '├🟩 ' })).toBeUndefined()
+  expect(await band.find({ type: 'Text', text: '╰🔧 ' })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: ' · 1 of 2 · 12:30 · 🟩 1 · 🔧 1' })).toBeDefined()
+  await band.unmount()
+})
+
 test('a plan saved before task times loads and draws with no time, and times the tasks that move after', async ($, on) => {
   const clock = mock.clock(on, { now: NOON })
   mock.store(on, { 'plan:test-session': UNTIMED })
@@ -445,13 +512,14 @@ test('a plan saved before task times loads and draws with no time, and times the
   expect(loaded).toContain('│      ├🟩 T1    ├🔧 T4    ╰🥚 T6')
 
   await $.tool.call({ tool: 'mcp__taskrail__set', tasks: { T4: '🟩', T5: '🔧' } })
-  await clock.advance(12 * MINUTE)
+  // Four minutes: T4 is done and has not settled out of the rows yet.
+  await clock.advance(4 * MINUTE)
 
   // T4 still has no start to count from; T5 started with this set, and its
   // time widens wave B for both of its tasks.
   const moved = String((await $.tool.call({ tool: 'mcp__taskrail__show' })).result)
-  expect(moved).toContain('│      ├🟩 T1    ├🟩 T4       ╰🥚 T6')
-  expect(moved).toContain('│      ├🥚 T2    ╰🔧 T5 · 12m')
+  expect(moved).toContain('│      ├🟩 T1    ├🟩 T4      ╰🥚 T6')
+  expect(moved).toContain('│      ├🥚 T2    ╰🔧 T5 · 4m')
 })
 
 test('staleTasks names the tasks in a running stage that nothing touched for longer than the limit', () => {

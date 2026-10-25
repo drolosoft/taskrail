@@ -69,6 +69,7 @@ Claude does not have to report everything. The mod listens to the engine's own a
 | The agent calls its next tool | the task takes back the icon it had; with nothing held, the call counts as news of the task |
 | The agent's turn ends | an answer hands a working task (🔧 🔑 🧟) to 👀; an error or a refusal makes it 💥; an interruption 🛑 |
 | Fifteen minutes go by with no `set` and no agent event touching a task in 🔧 👀 🩹 🧪 | the task becomes 🧟; the key line stays as it was. The next `set` or event moves it on as usual |
+| Five minutes go by since a task became 🟩 | the task leaves the rows and the rows close up, so a long plan keeps the band short; the header, the stations, the "N of M" and the tiles still count it. A 🚀 task stays in sight |
 
 The stale check runs once a minute, and also whenever the board is drawn. A task waiting for you (🔑) never goes stale.
 

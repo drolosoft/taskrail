@@ -63,6 +63,12 @@ const MINUTE_MS = 60 * 1000
 // is held up for long.
 export const STALE_AFTER_MS = 15 * 60 * 1000
 
+// How long a task stays in the rows once it is 🟩 before the board stops
+// drawing it. Five minutes: long enough to see it land, short enough that a
+// long plan does not grow the band by one row per finished task. The
+// header, the stations and the bar count it all the same.
+export const HIDE_DONE_AFTER_MS = 5 * 60 * 1000
+
 /**
  * Terminal cells a string occupies.
  * @param text plain text, no ANSI codes
@@ -234,13 +240,43 @@ export function headerLine(plan: WaveBoardPlan): string {
 }
 
 /**
- * The cells each wave's column takes: ten, or as many as its longest task
- * with its time and one space after it. A plan with no times draws exactly
- * as it did before they existed.
+ * True when the rows no longer show the task: 🟩 for longer than
+ * `HIDE_DONE_AFTER_MS`. Only the square settles: a 🚀 is news worth
+ * keeping in sight, and a 🟩 with no times (a plan stored before they
+ * existed) has no finish to count from, so it stays.
+ * @param now epoch milliseconds of the drawing
+ */
+export function isSettled(task: WaveBoardTask, now: number): boolean {
+  const [, icon, times] = task
+
+  if (icon !== '🟩' || times === undefined || times.doneAt === null) {
+    return false
+  }
+
+  return now - times.doneAt > HIDE_DONE_AFTER_MS
+}
+
+/**
+ * The waves as the rows draw them: every task but the settled ones. The
+ * stations, the header and the bar read the plan itself, so what is hidden
+ * is still counted.
+ * @param now epoch milliseconds of the drawing
+ */
+function shownWaves(plan: WaveBoardPlan, now: number): WaveBoardWave[] {
+  return plan.waves.map(wave => ({
+    name: wave.name,
+    tasks: wave.tasks.filter(task => !isSettled(task, now)),
+  }))
+}
+
+/**
+ * The cells each wave's column takes: ten, or as many as its longest shown
+ * task with its time and one space after it. A plan with no times draws
+ * exactly as it did before they existed.
  * @param now epoch milliseconds of the drawing
  */
 export function columnWidths(plan: WaveBoardPlan, now: number): number[] {
-  return plan.waves.map(wave => {
+  return shownWaves(plan, now).map(wave => {
     const widths = wave.tasks.map(task => {
       const time = taskTime(task, now)
 
@@ -287,20 +323,22 @@ export function rail(plan: WaveBoardPlan, now: number): string {
  * station, `├` on every row but the last, `╰` on the last, in a column as
  * wide as the station. Empty slots stay blank: a little drift reads better
  * than filler squares. Ids of tasks in flight go bold; after the id, the
- * task's time when it has one.
+ * task's time when it has one. A task settled as 🟩 (see `isSettled`) is
+ * left out and the rows close up, so a long plan keeps the band short.
  * @param now epoch milliseconds of the drawing
  */
 export function taskRows(plan: WaveBoardPlan, now: number): Segment[][] {
-  const depth = Math.max(0, ...plan.waves.map(wave => wave.tasks.length))
+  const waves = shownWaves(plan, now)
+  const depth = Math.max(0, ...waves.map(wave => wave.tasks.length))
   const widths = columnWidths(plan, now)
   const rows: Segment[][] = []
 
   for (let row = 0; row < depth; row += 1) {
-    const filled = plan.waves.map((wave, index) => (row < wave.tasks.length ? index : -1))
+    const filled = waves.map((wave, index) => (row < wave.tasks.length ? index : -1))
     const last = Math.max(...filled)
     const segments: Segment[] = [{ text: '      ' }]
 
-    plan.waves.slice(0, last + 1).forEach((wave, index) => {
+    waves.slice(0, last + 1).forEach((wave, index) => {
       const task = wave.tasks[row]
       const width = widths[index] ?? COLUMN
 
@@ -388,7 +426,8 @@ export function wrapText(text: string, width: number): string[] {
  * counts and a right edge would zigzag.
  * @param width cells of the rules; the band's `bodyColumns` less two
  * @param now epoch milliseconds of the drawing, for the time of each task
- *   still under way; the plan's last write when not given
+ *   still under way and for which 🟩 tasks have settled out of the rows;
+ *   the plan's last write when not given
  */
 export function renderFull(plan: WaveBoardPlan, width = DEFAULT_WIDTH, now = plan.updatedAt): Segment[][] {
   const { done, running, total } = progress(plan)
