@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.4.0] - 2026-10-30
+
 ### Added
 - The tiles line of the board and the bar end with a guess of the time left (`7/14 · ~18m left`) once the first task is done: the wall time since the first start divided by the tasks done, owed by every task not done less what it has already run. Never under a minute; nothing before the first task is done, after the last one, or on a plan saved before task times.
 
