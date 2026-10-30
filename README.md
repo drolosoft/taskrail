@@ -32,7 +32,7 @@ For one session with a local copy: `claude --plugin-dir ./taskrail`.
 | `/taskrail …` | What the band shows |
 |---|---|
 | `full` | The whole board: header, description, rail, tasks, key line and progress bar (the default) |
-| `bar` | One line: project, plan, time, a station per wave, the goal and ten tiles |
+| `bar` | One line: project, plan, time, a station per wave, the goal, ten tiles and the time left |
 | `both` | The whole board, and Claude also pastes it in the chat at every milestone |
 | `off` | Nothing in the band; Claude shows the board in the chat only when you ask |
 
@@ -50,7 +50,7 @@ The mod registers three tools. Claude calls them on its own when it runs a plan 
 | `set` | Updates task icons by id, the key line, the goal, the title or the description. Its result tells Claude what the current mode asks of the chat. When a wave that has begun still has two or more tasks in 🥚 and at most one running, the result adds one line saying so (never on the board), so Claude starts the independent ones at once. |
 | `show` | Returns the board as text, for the chat. |
 
-Icons: 🥚 pending · 🔧 working · 👀 in review · 🩹 fixing · 🧪 testing · 🟩 merged · 🚀 shipped · 🔑 needs you · 👻 missing · 🧟 stale · 💥 broken · 🥱 idle · 🛑 stopped. The header counts each of these icons in use. A wave's station is 🟩 when every task is merged; otherwise it shows the most pressing state among its tasks, in this order: 🛑 🔑 💥 🧟 👻 🩹 👀 🧪 🔧 🚀, else 🥚. The "N of M" counts 🟩 only; the tiles are green for 🟩, yellow for the running states (🔧 👀 🩹 🧪, at least one tile while anything runs) and red for the rest. `plan` and `set` also take a `note`, the key line under the rail. `set` reads ✅ (and ✔️, ☑️) as 🟩; any other icon outside this list is refused, the task keeps its icon and the result names the valid ones.
+Icons: 🥚 pending · 🔧 working · 👀 in review · 🩹 fixing · 🧪 testing · 🟩 merged · 🚀 shipped · 🔑 needs you · 👻 missing · 🧟 stale · 💥 broken · 🥱 idle · 🛑 stopped. The header counts each of these icons in use. A wave's station is 🟩 when every task is merged; otherwise it shows the most pressing state among its tasks, in this order: 🛑 🔑 💥 🧟 👻 🩹 👀 🧪 🔧 🚀, else 🥚. The "N of M" counts 🟩 only; the tiles are green for 🟩, yellow for the running states (🔧 👀 🩹 🧪, at least one tile while anything runs) and red for the rest. After the tiles, once the first task is done, a guess of the time left (`7/14 · ~18m left`): the wall time since the first task started, divided by the tasks done, is what one task costs with the waves running as they run, and every task not done owes that much less what it has already run. `plan` and `set` also take a `note`, the key line under the rail. `set` reads ✅ (and ✔️, ☑️) as 🟩; any other icon outside this list is refused, the task keeps its icon and the result names the valid ones.
 
 Each task keeps the time of its last move, when it first left 🥚 and when it reached 🟩 or 🚀. The full board and `show` print it after the task: how long it has run while it is under way (`🔧 T4 · 12m`), how long it took once it is done (`🟩 T4 · 48m`), in minutes under an hour and `1h12m` above; nothing for a pending task or under a minute. A wave's column widens to fit its times. The header keeps the time of the last update, and the `bar` mode shows no task times. A plan saved by an earlier version draws as before: the tasks it had under way show no time, and its pending ones are timed once they start.
 

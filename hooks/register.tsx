@@ -449,7 +449,7 @@ export const register: Register = on => {
       // tasks already marked and the timer stores them within the minute.
       const drawn = markStale(current, now, STALE_AFTER_MS).plan
 
-      bar = renderBar(drawn)
+      bar = renderBar(drawn, now)
       lines = renderFull(drawn, width, now)
     } catch (err) {
       noteFailure($, 'ui.render', err)

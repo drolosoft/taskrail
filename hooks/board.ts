@@ -197,6 +197,56 @@ export function stamp(task: WaveBoardTask, icon: string, now: number): TaskTimes
 }
 
 /**
+ * A guess of how long the plan has left, from its pace so far: the wall
+ * time since the first task started, divided by the tasks done, is what
+ * one task costs with the waves running as they run; every task not done
+ * owes that much, less what it has already run, up to a task's worth.
+ * @param now epoch milliseconds of the drawing
+ * @returns milliseconds, at least a minute, or null when there is nothing
+ *   to guess from: no task done yet, every task done, or a plan stored
+ *   before the times existed
+ */
+export function remainingTime(plan: WaveBoardPlan, now: number): number | null {
+  const tasks = plan.waves.flatMap(wave => wave.tasks)
+  const finished = tasks.filter(([, , times]) => times?.doneAt != null)
+  const starts = tasks.map(([, , times]) => times?.startedAt).filter((at): at is number => at != null)
+
+  if (finished.length === 0 || finished.length === tasks.length || starts.length === 0) {
+    return null
+  }
+
+  const elapsed = now - Math.min(...starts)
+
+  if (elapsed <= 0) {
+    return null
+  }
+
+  const perTask = elapsed / finished.length
+
+  // The tasks still owed, each less the time it has already run.
+  const owed = tasks
+    .filter(([, , times]) => times?.doneAt == null)
+    .reduce((sum, [, , times]) => {
+      const run = times?.startedAt != null ? now - times.startedAt : 0
+
+      return sum + Math.max(0, perTask - run)
+    }, 0)
+
+  return Math.max(MINUTE_MS, owed)
+}
+
+/**
+ * What the bar and the bottom line print after the "N/M": ` · ~18m left`,
+ * or nothing while the plan has no pace to guess from.
+ * @param now epoch milliseconds of the drawing
+ */
+export function timeLeft(plan: WaveBoardPlan, now: number): string {
+  const left = remainingTime(plan, now)
+
+  return left === null ? '' : ` · ~${duration(left)} left`
+}
+
+/**
  * Colour tiles at scale: one tile per `100 / scale` percent of the plan,
  * green merged, yellow running, red pending or blocked. Never one tile per
  * task.
@@ -455,7 +505,7 @@ export function renderFull(plan: WaveBoardPlan, width = DEFAULT_WIDTH, now = pla
   taskRows(plan, now).forEach(row => lines.push([{ text: '│' }, ...row]))
   lines.push([{ text: `├${rule}` }])
   lines.push([{ text: `│ ${plan.note}` }])
-  lines.push([{ text: `│ ${tiles(done, running, total, 30)} ${done}/${total}` }])
+  lines.push([{ text: `│ ${tiles(done, running, total, 30)} ${done}/${total}${timeLeft(plan, now)}` }])
   lines.push([{ text: `╰${rule}` }])
 
   return lines
@@ -463,9 +513,11 @@ export function renderFull(plan: WaveBoardPlan, width = DEFAULT_WIDTH, now = pla
 
 /**
  * The one-line rail for mode `bar`: project, title, time, one station per
- * wave, the goal and ten tiles.
+ * wave, the goal, ten tiles and the time left, when there is a guess.
+ * @param now epoch milliseconds of the drawing, for the time left; the
+ *   plan's last write when not given
  */
-export function renderBar(plan: WaveBoardPlan): string {
+export function renderBar(plan: WaveBoardPlan, now = plan.updatedAt): string {
   const { done, running, total } = progress(plan)
   const stations = plan.waves
     .map(wave => {
@@ -475,7 +527,7 @@ export function renderBar(plan: WaveBoardPlan): string {
     })
     .join(' ┄ ')
 
-  return ` ${plan.project} · ${plan.title} · ${clock(plan.updatedAt)} · ${stations} ▶ 🚀 ${plan.goal} · ${tiles(done, running, total, 10)} ${done}/${total}`
+  return ` ${plan.project} · ${plan.title} · ${clock(plan.updatedAt)} · ${stations} ▶ 🚀 ${plan.goal} · ${tiles(done, running, total, 10)} ${done}/${total}${timeLeft(plan, now)}`
 }
 
 /**

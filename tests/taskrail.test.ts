@@ -12,6 +12,7 @@ import {
   pad,
   renderBar,
   renderFull,
+  remainingTime,
   renderText,
   serialWarnings,
   staleTasks,
@@ -636,4 +637,39 @@ test('the serial warning reaches the set result only, never the board', async ($
 
   const parallel = await $.tool.call({ tool: 'mcp__taskrail__set', tasks: { T2: '🔧', T3: '🔧' } })
   expect(String(parallel.result)).not.toContain('independent tasks')
+})
+
+test('the board guesses how long is left from the pace of the tasks done so far', () => {
+  const started = applyUpdates(EXAMPLE, { tasks: { T1: '🔧', T2: '🔧', T4: '🔧' } }, NOON).plan
+  const finished = applyUpdates(started, { tasks: { T1: '🟩', T4: '🟩' } }, NOON + 10 * MINUTE).plan
+
+  // Two tasks done in twelve minutes of wall time is six minutes per task;
+  // four tasks are left, 24 minutes, and T2 has already run twelve of
+  // them, which counts for a full task: 18 minutes.
+  expect(remainingTime(finished, NOON + 12 * MINUTE)).toBe(18 * MINUTE)
+
+  const lines = renderText(finished, 40, NOON + 12 * MINUTE).split('\n')
+  expect(lines[lines.length - 2]).toMatch(/ 2\/6 · ~18m left$/)
+  expect(renderBar(finished, NOON + 12 * MINUTE)).toMatch(/ 2\/6 · ~18m left$/)
+
+  // Under a minute left still reads as a minute: the guess is never zero.
+  const lastRun = applyUpdates(finished, { tasks: { T2: '🟩', T3: '🟩', T5: '🟩' } }, NOON + 12 * MINUTE).plan
+  const almost = applyUpdates(lastRun, { tasks: { T6: '🔧' } }, NOON + 12 * MINUTE).plan
+  expect(renderBar(almost, NOON + 20 * MINUTE)).toMatch(/ 5\/6 · ~1m left$/)
+})
+
+test('no guess before the first task is done, after the last one, or on a plan saved without times', () => {
+  const started = applyUpdates(EXAMPLE, { tasks: { T1: '🔧' } }, NOON).plan
+  expect(remainingTime(started, NOON + 5 * MINUTE)).toBeNull()
+
+  const lines = renderText(started, 40, NOON + 5 * MINUTE).split('\n')
+  expect(lines[lines.length - 2]).toMatch(/ 0\/6$/)
+  expect(renderBar(started, NOON + 5 * MINUTE)).toMatch(/ 0\/6$/)
+
+  const small = newPlan({ project: 'hopto', title: 'plan 8', goal: 'v1', waves: [{ name: 'A', tasks: ['T1'] }] }, NOON)
+  const done = applyUpdates(small, { tasks: { T1: '🟩' } }, NOON + MINUTE).plan
+  expect(remainingTime(done, NOON + 2 * MINUTE)).toBeNull()
+  expect(renderBar(done, NOON + 2 * MINUTE)).toMatch(/ 1\/1$/)
+
+  expect(remainingTime(UNTIMED, NOON + 20 * MINUTE)).toBeNull()
 })
